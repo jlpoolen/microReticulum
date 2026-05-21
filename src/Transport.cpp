@@ -2226,12 +2226,13 @@ DestinationEntry empty_destination_entry;
 								ttl = DESTINATION_TIMEOUT;
 							}
 							const bool path_already_known = _new_path_table.exists(packet.destination_hash().collection());
+							const bool destination_identity_known = (bool)Identity::recall(packet.destination_hash());
 							if (_new_path_table.put(packet.destination_hash().collection(), destination_table_entry, ttl)) {
 								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
 								++_destinations_added;
 							}
-							else if (path_already_known || _new_path_table.exists(packet.destination_hash().collection())) {
-								NOTICEF("Path table already has destination %s; keeping existing path entry", packet.destination_hash().toHex().c_str());
+							else if (path_already_known || _new_path_table.exists(packet.destination_hash().collection()) || destination_identity_known) {
+								NOTICEF("Path table already knows destination %s; keeping existing path/identity entry", packet.destination_hash().toHex().c_str());
 							}
 							else {
 								ERRORF("Failed to add destination %s to path table!", packet.destination_hash().toHex().c_str());

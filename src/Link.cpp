@@ -33,11 +33,67 @@
 #include <math.h>
 
 #include <algorithm>
+#include <string.h>
+
+#if defined(ARDUINO)
+#include <Arduino.h>
+#endif
 
 using namespace RNS;
 using namespace RNS::Type::Link;
 using namespace RNS::Cryptography;
 using namespace RNS::Utilities;
+
+#ifndef RNS_DEBUG_INSTRUMENTATION
+#define RNS_DEBUG_INSTRUMENTATION 1
+#endif
+
+static uint32_t rns_debug_crc32(const Bytes& bytes) {
+	uint32_t crc = 0xFFFFFFFFUL;
+	for (size_t i = 0; i < bytes.size(); ++i) {
+		crc ^= bytes[i];
+		for (uint8_t bit = 0; bit < 8; ++bit) {
+			crc = (crc >> 1) ^ (0xEDB88320UL & (0UL - (crc & 1UL)));
+		}
+	}
+	return ~crc;
+}
+
+static const char* rns_debug_decrypt_class(const char* detail) {
+	if (!detail) return "EXCEPTION_OTHER";
+	if (strstr(detail, "HMAC")) return "HMAC_INVALID";
+	if (strstr(detail, "only")) return "TOKEN_TOO_SHORT";
+	if (strstr(detail, "version")) return "TOKEN_VERSION_BAD";
+	if (strstr(detail, "timestamp")) return "TOKEN_TIMESTAMP_BAD";
+	if (strstr(detail, "base64")) return "TOKEN_BASE64_BAD";
+	if (strstr(detail, "padding")) return "PKCS7_PADDING_FAIL";
+	if (strstr(detail, "decrypt Token token")) return "AES_DECRYPT_FAIL";
+	if (strstr(detail, "key")) return "WRONG_LINK_CONTEXT";
+	return "EXCEPTION_OTHER";
+}
+
+static uint32_t rns_debug_sign_key_crc32(const Bytes& derived_key) {
+	if (derived_key.size() == 64) return rns_debug_crc32(derived_key.left(32));
+	if (derived_key.size() == 32) return rns_debug_crc32(derived_key.left(16));
+	return rns_debug_crc32(derived_key);
+}
+
+static uint32_t rns_debug_enc_key_crc32(const Bytes& derived_key) {
+	if (derived_key.size() == 64) return rns_debug_crc32(derived_key.mid(32));
+	if (derived_key.size() == 32) return rns_debug_crc32(derived_key.mid(16));
+	return rns_debug_crc32(derived_key);
+}
+
+extern "C" const char* rns_debug_board_name() __attribute__((weak));
+extern "C" const char* rns_debug_role_name() __attribute__((weak));
+
+static const char* rns_debug_board() {
+	return rns_debug_board_name ? rns_debug_board_name() : "library";
+}
+
+static const char* rns_debug_role() {
+	return rns_debug_role_name ? rns_debug_role_name() : "unknown";
+}
 
 /*static*/ uint8_t Link::resource_strategies = ACCEPT_NONE | ACCEPT_APP | ACCEPT_ALL;
 
@@ -1316,7 +1372,20 @@ const Bytes Link::encrypt(const Bytes& plaintext) {
 				throw e;
 			}
 		}
-		return _object->_token->encrypt(plaintext);
+		Bytes token = _object->_token->encrypt(plaintext);
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+		Serial.printf("RNSDEC ms=%lu board=%s role=%s event=encrypt link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
+			(unsigned long)millis(),
+			rns_debug_board(),
+			rns_debug_role(),
+			_object->_link_id.toHex().c_str(),
+			(unsigned)token.size(),
+			(unsigned long)rns_debug_crc32(token),
+			(unsigned long)rns_debug_sign_key_crc32(_object->_derived_key),
+			(unsigned long)rns_debug_enc_key_crc32(_object->_derived_key),
+			toString().c_str());
+#endif
+		return token;
 	}
 	catch (const std::exception& e) {
 		ERRORF("Encryption on link %s failed. The contained exception was: %s", toString().c_str(), e.what());
@@ -1331,9 +1400,34 @@ const Bytes Link::decrypt(const Bytes& ciphertext) {
 		if (!_object->_token) {
 			_object->_token.reset(new Token(_object->_derived_key));
 		}
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+		Serial.printf("RNSDEC ms=%lu board=%s role=%s event=attempt link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
+			(unsigned long)millis(),
+			rns_debug_board(),
+			rns_debug_role(),
+			_object->_link_id.toHex().c_str(),
+			(unsigned)ciphertext.size(),
+			(unsigned long)rns_debug_crc32(ciphertext),
+			(unsigned long)rns_debug_sign_key_crc32(_object->_derived_key),
+			(unsigned long)rns_debug_enc_key_crc32(_object->_derived_key),
+			toString().c_str());
+#endif
 		return _object->_token->decrypt(ciphertext);
 	}
 	catch (const std::exception& e) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+		Serial.printf("RNSDEC ms=%lu board=%s role=%s event=%s link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
+			(unsigned long)millis(),
+			rns_debug_board(),
+			rns_debug_role(),
+			rns_debug_decrypt_class(e.what()),
+			_object->_link_id.toHex().c_str(),
+			(unsigned)ciphertext.size(),
+			(unsigned long)rns_debug_crc32(ciphertext),
+			(unsigned long)rns_debug_sign_key_crc32(_object->_derived_key),
+			(unsigned long)rns_debug_enc_key_crc32(_object->_derived_key),
+			toString().c_str());
+#endif
 		ERRORF("Decryption failed on link %s. The contained exception was: %s", toString().c_str(), e.what());
 		return {Bytes::NONE};
 	}
