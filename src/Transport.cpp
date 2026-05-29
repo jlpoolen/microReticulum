@@ -54,9 +54,29 @@ using namespace RNS::Persistence;
 #define RNS_HASHLIST_MAX 100
 #endif
 
+#ifndef MR_TRANSPORT_PROBE
+#define MR_TRANSPORT_PROBE 0
+#endif
+
+#if MR_TRANSPORT_PROBE
+#define MRTPROBEF(...) NOTICEF(__VA_ARGS__)
+#else
+#define MRTPROBEF(...) do {} while (0)
+#endif
+
 #ifndef RNS_PR_TAGS_MAX
 #define RNS_PR_TAGS_MAX	 32
 #endif
+
+static const char* mr_packet_type_name(RNS::Type::Packet::types packet_type) {
+	switch (packet_type) {
+		case RNS::Type::Packet::DATA: return "DATA";
+		case RNS::Type::Packet::ANNOUNCE: return "ANNOUNCE";
+		case RNS::Type::Packet::LINKREQUEST: return "LINKREQUEST";
+		case RNS::Type::Packet::PROOF: return "PROOF";
+		default: return "UNKNOWN";
+	}
+}
 
 /*static*/ Transport::InterfaceTable Transport::_interfaces;
 /*static*/ Transport::DestinationTable Transport::_destinations;
@@ -858,6 +878,12 @@ DestinationEntry empty_destination_entry;
 		TRACE("Transport::outbound: Path to destination is known");
         //outbound_interface = Transport.destination_table[packet.destination_hash][5]
 		Interface outbound_interface = destination_entry.receiving_interface();
+		MRTPROBEF("MR TRANSPORT OUT: type=%s dest=%s hops=%u next=%s iface=%s",
+		          mr_packet_type_name(packet.packet_type()),
+		          packet.destination_hash().toHex().c_str(),
+		          (unsigned)destination_entry._hops,
+		          destination_entry._received_from.toHex().c_str(),
+		          outbound_interface.toString().c_str());
 
 		// If there's more than one hop to the destination, and we know
 		// a path, we insert the packet into transport by adding the next
@@ -936,6 +962,11 @@ DestinationEntry empty_destination_entry;
 	// interface, or belongs to a link.
 	else {
 		TRACE("Transport::outbound: Path to destination is unknown");
+		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
+			MRTPROBEF("MR TRANSPORT OUT: type=%s dest=%s path=unknown",
+			          mr_packet_type_name(packet.packet_type()),
+			          packet.destination_hash().toHex().c_str());
+		}
 		bool stored_hash = false;
 		for (auto& [hash, interface] : _interfaces) {
 			TRACEF("Transport::outbound: Checking interface %s", interface.toString().c_str());
@@ -1667,6 +1698,12 @@ DestinationEntry empty_destination_entry;
 						}
 
 						Interface outbound_interface = destination_entry.receiving_interface();
+						MRTPROBEF("MR TRANSPORT FWD: type=%s dest=%s remaining=%u next=%s iface=%s",
+						          mr_packet_type_name(packet.packet_type()),
+						          packet.destination_hash().toHex().c_str(),
+						          (unsigned)remaining_hops,
+						          next_hop.toHex().c_str(),
+						          outbound_interface.toString().c_str());
 
 						if (packet.packet_type() == Type::Packet::LINKREQUEST) {
 							TRACE("Transport::inbound: Packet is next-hop LINKREQUEST");
@@ -1738,10 +1775,18 @@ DestinationEntry empty_destination_entry;
 						// TODO: There should probably be some kind of REJECT
 						// mechanism here, to signal to the source that their
 						// expected path failed.
+						MRTPROBEF("MR TRANSPORT DROP: reason=no_path type=%s dest=%s",
+						          mr_packet_type_name(packet.packet_type()),
+						          packet.destination_hash().toHex().c_str());
 						TRACEF("Got packet in transport, but no known path to final destination %s. Dropping packet.", packet.destination_hash().toHex().c_str());
 					}
 				}
 				else {
+					MRTPROBEF("MR TRANSPORT IGNORE: reason=not_next_hop type=%s dest=%s transport=%s local=%s",
+					          mr_packet_type_name(packet.packet_type()),
+					          packet.destination_hash().toHex().c_str(),
+					          packet.transport_id().toHex().c_str(),
+					          _identity.hash().toHex().c_str());
 					TRACE("Transport::inbound: We are not designated next-hop so not transporting");
 				}
 			}
@@ -1790,6 +1835,12 @@ DestinationEntry empty_destination_entry;
 					}
 
 					if (outbound_interface) {
+						MRTPROBEF("MR TRANSPORT LINKFWD: dest=%s hops=%u link_remaining=%u link_hops=%u iface=%s",
+						          packet.destination_hash().toHex().c_str(),
+						          (unsigned)packet.hops(),
+						          (unsigned)link_entry._remaining_hops,
+						          (unsigned)link_entry._hops,
+						          outbound_interface.toString().c_str());
 						TRACE("Transport::inbound: Transmitting link transport packet");
 						// CBA RESERVE
 						//Bytes new_raw;
@@ -1806,6 +1857,11 @@ DestinationEntry empty_destination_entry;
 						_packet_hashlist.insert(packet.packet_hash());
 					}
 					else {
+						MRTPROBEF("MR TRANSPORT DROP: reason=link_hop_mismatch dest=%s hops=%u link_remaining=%u link_hops=%u",
+						          packet.destination_hash().toHex().c_str(),
+						          (unsigned)packet.hops(),
+						          (unsigned)link_entry._remaining_hops,
+						          (unsigned)link_entry._hops);
 						//p pass
 					}
 				}
@@ -2246,6 +2302,11 @@ DestinationEntry empty_destination_entry;
 						}
 
 						DEBUGF("Destination %s is now %d hops away via %s on %s", packet.destination_hash().toHex().c_str(), announce_hops, received_from.toHex().c_str(), packet.receiving_interface().toString().c_str());
+						MRTPROBEF("MR TRANSPORT PATH: dest=%s hops=%u via=%s iface=%s",
+						          packet.destination_hash().toHex().c_str(),
+						          (unsigned)announce_hops,
+						          received_from.toHex().c_str(),
+						          packet.receiving_interface().toString().c_str());
 						//TRACEF("Transport::inbound: Destination %s has data: %s", packet.destination_hash().toHex().c_str(), packet.data().toHex().c_str());
 						//TRACEF("Transport::inbound: Destination %s has text: %s", packet.destination_hash().toHex().c_str(), packet.data().toString().c_str());
 
