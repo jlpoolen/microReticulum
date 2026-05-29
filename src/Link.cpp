@@ -1083,24 +1083,85 @@ void Link::receive(const Packet& packet) {
 				_object->_status = Type::Link::ACTIVE;
 			}
 
-			if (packet.packet_type() == Type::Packet::DATA) {
-				bool should_query = false;
-				switch (packet.context()) {
-				case Type::Packet::CONTEXT_NONE:
-				{
-					const Bytes plaintext = decrypt(packet.data());
-					if (plaintext) {
-						if (_object->_callbacks._packet) {
-							//z thread = threading.Thread(target=_object->_callbacks.packet, args=(plaintext, packet))
-							//z thread.daemon = True
-							//z thread.start()
-							try {
-								_object->_callbacks._packet(plaintext, packet);
+				if (packet.packet_type() == Type::Packet::DATA) {
+					bool should_query = false;
+					switch (packet.context()) {
+					case Type::Packet::CONTEXT_NONE:
+					{
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+						Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=context_none_enter link_id=%s packet_len=%u callback=%u status=%u initiator=%u link_obj=%s\r\n",
+							(unsigned long)millis(),
+							rns_debug_board(),
+							rns_debug_role(),
+							_object->_link_id.toHex().c_str(),
+							(unsigned)packet.data().size(),
+							_object->_callbacks._packet ? 1U : 0U,
+							(unsigned)_object->_status,
+							_object->_initiator ? 1U : 0U,
+							toString().c_str());
+#endif
+						const Bytes plaintext = decrypt(packet.data());
+						if (plaintext) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+							Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX text=%s link_obj=%s\r\n",
+								(unsigned long)millis(),
+								rns_debug_board(),
+								rns_debug_role(),
+								_object->_link_id.toHex().c_str(),
+								(unsigned)plaintext.size(),
+								(unsigned long)rns_debug_crc32(plaintext),
+								plaintext.toString().c_str(),
+								toString().c_str());
+#endif
+							if (_object->_callbacks._packet) {
+								//z thread = threading.Thread(target=_object->_callbacks.packet, args=(plaintext, packet))
+								//z thread.daemon = True
+								//z thread.start()
+								try {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+									Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=callback_enter link_id=%s plaintext_len=%u link_obj=%s\r\n",
+										(unsigned long)millis(),
+										rns_debug_board(),
+										rns_debug_role(),
+										_object->_link_id.toHex().c_str(),
+										(unsigned)plaintext.size(),
+										toString().c_str());
+#endif
+									_object->_callbacks._packet(plaintext, packet);
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+									Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=callback_return link_id=%s link_obj=%s\r\n",
+										(unsigned long)millis(),
+										rns_debug_board(),
+										rns_debug_role(),
+										_object->_link_id.toHex().c_str(),
+										toString().c_str());
+#endif
+								}
+								catch (const std::exception& e) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+									Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=callback_exception link_id=%s detail=%s link_obj=%s\r\n",
+										(unsigned long)millis(),
+										rns_debug_board(),
+										rns_debug_role(),
+										_object->_link_id.toHex().c_str(),
+										e.what(),
+										toString().c_str());
+#endif
+									ERRORF("Error while executing packet callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+								}
 							}
-							catch (const std::exception& e) {
-								ERRORF("Error while executing packet callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+							else {
+								Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=no_packet_callback link_id=%s plaintext_len=%u text=%s link_obj=%s\r\n",
+									(unsigned long)millis(),
+									rns_debug_board(),
+									rns_debug_role(),
+									_object->_link_id.toHex().c_str(),
+									(unsigned)plaintext.size(),
+									plaintext.toString().c_str(),
+									toString().c_str());
 							}
-						}
+#endif
 						
 						if (_object->_destination.proof_strategy() == Type::Destination::PROVE_ALL) {
 							const_cast<Packet&>(packet).prove();
