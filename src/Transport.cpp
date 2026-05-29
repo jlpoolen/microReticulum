@@ -2444,21 +2444,37 @@ DestinationEntry empty_destination_entry;
 			}
 		}
 
-		// Handling for proofs and link-request proofs
-		else if (packet.packet_type() == Type::Packet::PROOF) {
-			TRACE("Transport::inbound: Packet is PROOF");
-			if (packet.context() == Type::Packet::LRPROOF) {
-				TRACE("Transport::inbound: Packet is LINK PROOF");
-				// This is a link request proof, check if it
-				// needs to be transported
-				if ((Reticulum::transport_enabled() || for_local_client_link || from_local_client) && _link_table.find(packet.destination_hash()) != _link_table.end()) {
-					TRACE("Handling link request proof...");
-					LinkEntry& link_entry = (*_link_table.find(packet.destination_hash())).second;
-					if (packet.receiving_interface() == link_entry._outbound_interface) {
-						try {
-							if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2) || packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2 + Type::Link::LINK_MTU_SIZE)) {
-								Bytes signalling_bytes;
-								if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2 + Type::Link::LINK_MTU_SIZE)) {
+			// Handling for proofs and link-request proofs
+			else if (packet.packet_type() == Type::Packet::PROOF) {
+				TRACE("Transport::inbound: Packet is PROOF");
+				MRTPROBEF("RNSPROOF IN: dest=%s ctx=%u data_len=%u hops=%u iface=%s link_table=%u pending_links=%u",
+					packet.destination_hash().toHex().c_str(),
+					(unsigned)packet.context(),
+					(unsigned)packet.data().size(),
+					(unsigned)packet.hops(),
+					packet.receiving_interface().toString().c_str(),
+					_link_table.find(packet.destination_hash()) != _link_table.end() ? 1U : 0U,
+					(unsigned)_pending_links.size());
+				if (packet.context() == Type::Packet::LRPROOF) {
+					TRACE("Transport::inbound: Packet is LINK PROOF");
+					// This is a link request proof, check if it
+					// needs to be transported
+					if ((Reticulum::transport_enabled() || for_local_client_link || from_local_client) && _link_table.find(packet.destination_hash()) != _link_table.end()) {
+						TRACE("Handling link request proof...");
+						LinkEntry& link_entry = (*_link_table.find(packet.destination_hash())).second;
+						MRTPROBEF("RNSPROOF TRANSPORT_CANDIDATE: dest=%s recv_iface=%s expected_out_iface=%s return_iface=%s remaining=%u hops=%u validated=%u",
+							packet.destination_hash().toHex().c_str(),
+							packet.receiving_interface().toString().c_str(),
+							link_entry._outbound_interface.toString().c_str(),
+							link_entry._receiving_interface.toString().c_str(),
+							(unsigned)link_entry._remaining_hops,
+							(unsigned)link_entry._hops,
+							link_entry._validated ? 1U : 0U);
+						if (packet.receiving_interface() == link_entry._outbound_interface) {
+							try {
+								if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2) || packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2 + Type::Link::LINK_MTU_SIZE)) {
+									Bytes signalling_bytes;
+									if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2 + Type::Link::LINK_MTU_SIZE)) {
 									signalling_bytes = Link::signalling_bytes(Link::mtu_from_lp_packet(packet), Link::mode_from_lp_packet(packet));
 								}
 								Bytes peer_pub_bytes = packet.data().mid(Type::Identity::SIGLENGTH/8, Type::Link::ECPUBSIZE/2);
@@ -2468,49 +2484,91 @@ DestinationEntry empty_destination_entry;
 								Bytes signed_data = packet.destination_hash() + peer_pub_bytes + peer_sig_pub_bytes + signalling_bytes;
 								Bytes signature = packet.data().left(Type::Identity::SIGLENGTH/8);
 
-								if (peer_identity.validate(signature, signed_data)) {
-									TRACEF("Link request proof validated for transport via %s", link_entry._receiving_interface.toString().c_str());
-									//p new_raw = packet.raw[0:1]
-									// CBA RESERVE
-									//Bytes new_raw = packet.raw().left(1);
-									Bytes new_raw(512);
-									new_raw << packet.raw().left(1);
+									if (peer_identity.validate(signature, signed_data)) {
+										TRACEF("Link request proof validated for transport via %s", link_entry._receiving_interface.toString().c_str());
+										MRTPROBEF("RNSPROOF TRANSPORT_VALID: dest=%s peer_dest=%s recv_iface=%s return_iface=%s raw_len=%u",
+											packet.destination_hash().toHex().c_str(),
+											link_entry._destination_hash.toHex().c_str(),
+											packet.receiving_interface().toString().c_str(),
+											link_entry._receiving_interface.toString().c_str(),
+											(unsigned)packet.raw().size());
+										//p new_raw = packet.raw[0:1]
+										// CBA RESERVE
+										//Bytes new_raw = packet.raw().left(1);
+										Bytes new_raw(512);
+										new_raw << packet.raw().left(1);
 									//p new_raw += struct.pack("!B", packet.hops)
 									new_raw << packet.hops();
-									//p new_raw += packet.raw[2:]
-									new_raw << packet.raw().mid(2);
-									link_entry._validated = true;
-									transmit(link_entry._receiving_interface, new_raw);
+										//p new_raw += packet.raw[2:]
+										new_raw << packet.raw().mid(2);
+										link_entry._validated = true;
+										transmit(link_entry._receiving_interface, new_raw);
+										MRTPROBEF("RNSPROOF TRANSPORT_SENT: dest=%s return_iface=%s new_raw_len=%u",
+											packet.destination_hash().toHex().c_str(),
+											link_entry._receiving_interface.toString().c_str(),
+											(unsigned)new_raw.size());
+									}
+									else {
+										MRTPROBEF("RNSPROOF TRANSPORT_INVALID_SIG: dest=%s peer_dest=%s",
+											packet.destination_hash().toHex().c_str(),
+											link_entry._destination_hash.toHex().c_str());
+										DEBUGF("Invalid link request proof in transport for link %s, dropping proof.", packet.destination_hash().toHex().c_str());
+									}
 								}
 								else {
-									DEBUGF("Invalid link request proof in transport for link %s, dropping proof.", packet.destination_hash().toHex().c_str());
+									MRTPROBEF("RNSPROOF TRANSPORT_BAD_SIZE: dest=%s data_len=%u",
+										packet.destination_hash().toHex().c_str(),
+										(unsigned)packet.data().size());
 								}
 							}
+							catch (const std::exception& e) {
+								MRTPROBEF("RNSPROOF TRANSPORT_EXCEPTION: dest=%s detail=%s",
+									packet.destination_hash().toHex().c_str(),
+									e.what());
+								ERRORF("Error while transporting link request proof. The contained exception was: %s", e.what());
+							}
 						}
-						catch (const std::exception& e) {
-							ERRORF("Error while transporting link request proof. The contained exception was: %s", e.what());
+						else {
+							MRTPROBEF("RNSPROOF TRANSPORT_WRONG_IFACE: dest=%s recv_iface=%s expected_out_iface=%s",
+								packet.destination_hash().toHex().c_str(),
+								packet.receiving_interface().toString().c_str(),
+								link_entry._outbound_interface.toString().c_str());
+							DEBUG("Link request proof received on wrong interface, not transporting it.");
 						}
 					}
 					else {
-						DEBUG("Link request proof received on wrong interface, not transporting it.");
-					}
-				}
-				else {
-					// Check if we can deliver it to a local
-					// pending link
-					TRACEF("Handling proof for link request %s", packet.destination_hash().toHex().c_str());
-					// CBA Must make a copy of _pending_links before traversing since it gets modified
-					//for (auto link : _pending_links) {
-					std::set<Link> pending_links(_pending_links);
-					for (auto& link : pending_links) {
-						TRACEF("Checking for link request handling by pending link %s", link.link_id().toHex().c_str());
-						if (link.link_id() == packet.destination_hash()) {
-							TRACE("Requesting pending link to validate proof");
-							const_cast<Link&>(link).validate_proof(packet);
+						// Check if we can deliver it to a local
+						// pending link
+						TRACEF("Handling proof for link request %s", packet.destination_hash().toHex().c_str());
+						MRTPROBEF("RNSPROOF LOCAL_SCAN: dest=%s pending_links=%u transport_enabled=%u for_local_client_link=%u from_local_client=%u",
+							packet.destination_hash().toHex().c_str(),
+							(unsigned)_pending_links.size(),
+							Reticulum::transport_enabled() ? 1U : 0U,
+							for_local_client_link ? 1U : 0U,
+							from_local_client ? 1U : 0U);
+						// CBA Must make a copy of _pending_links before traversing since it gets modified
+						//for (auto link : _pending_links) {
+						std::set<Link> pending_links(_pending_links);
+						bool matched_pending_link = false;
+						for (auto& link : pending_links) {
+							TRACEF("Checking for link request handling by pending link %s", link.link_id().toHex().c_str());
+							if (link.link_id() == packet.destination_hash()) {
+								TRACE("Requesting pending link to validate proof");
+								matched_pending_link = true;
+								MRTPROBEF("RNSPROOF LOCAL_MATCH: dest=%s pending_link=%s iface=%s",
+									packet.destination_hash().toHex().c_str(),
+									link.link_id().toHex().c_str(),
+									packet.receiving_interface().toString().c_str());
+								const_cast<Link&>(link).validate_proof(packet);
+							}
+						}
+						if (!matched_pending_link) {
+							MRTPROBEF("RNSPROOF LOCAL_NO_MATCH: dest=%s pending_links=%u",
+								packet.destination_hash().toHex().c_str(),
+								(unsigned)_pending_links.size());
 						}
 					}
 				}
-			}
 			else if (packet.context() == Type::Packet::RESOURCE_PRF) {
 				TRACE("Transport::inbound: Packet is RESOURCE PROOF");
 				std::set<Link> active_links(_active_links);

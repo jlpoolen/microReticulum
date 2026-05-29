@@ -378,6 +378,20 @@ void Link::prove_packet(const Packet& packet) {
 void Link::validate_proof(const Packet& packet) {
 	assert(_object);
 	DEBUGF("Link %s validating proof", link_id().toHex().c_str());
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+	Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=validate_enter link_id=%s status=%u initiator=%u packet_dest=%s data_len=%u raw_len=%u iface=%s link_obj=%s\r\n",
+		(unsigned long)millis(),
+		rns_debug_board(),
+		rns_debug_role(),
+		_object->_link_id.toHex().c_str(),
+		(unsigned)_object->_status,
+		_object->_initiator ? 1U : 0U,
+		packet.destination_hash().toHex().c_str(),
+		(unsigned)packet.data().size(),
+		(unsigned)packet.raw().size(),
+		packet.receiving_interface().toString().c_str(),
+		toString().c_str());
+#endif
 	try {
 		if (_object->_status == Type::Link::PENDING) {
 			Bytes packet_data(packet.data());
@@ -387,7 +401,18 @@ void Link::validate_proof(const Packet& packet) {
 			uint16_t confirmed_mtu = 0;
 			link_mode mode = mode_from_lp_packet(packet);
 			DEBUGF("Validating link request proof with mode %d", mode);
-			if (mode != _object->_mode) throw std::runtime_error("Invalid link mode "+std::to_string(mode)+" in link request proof");
+			if (mode != _object->_mode) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+				Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=mode_mismatch link_id=%s proof_mode=%u expected_mode=%u\r\n",
+					(unsigned long)millis(),
+					rns_debug_board(),
+					rns_debug_role(),
+					_object->_link_id.toHex().c_str(),
+					(unsigned)mode,
+					(unsigned)_object->_mode);
+#endif
+				throw std::runtime_error("Invalid link mode "+std::to_string(mode)+" in link request proof");
+			}
             //p if len(packet.data) == RNS.Identity.SIGLENGTH//8+Link.ECPUBSIZE//2+Link.LINK_MTU_SIZE:
 			if (packet_data.size() == Type::Identity::SIGLENGTH/8+ECPUBSIZE/2+RNS::Type::Link::LINK_MTU_SIZE) {
 				confirmed_mtu = Link::mtu_from_lp_packet(packet);
@@ -413,7 +438,25 @@ void Link::validate_proof(const Packet& packet) {
 				
 				TRACEF("Link %s validating identity", link_id().toHex().c_str());
 				if (_object->_destination.identity().validate(signature, signed_data)) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+					Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=signature_valid link_id=%s packet_dest=%s confirmed_mtu=%u iface=%s\r\n",
+						(unsigned long)millis(),
+						rns_debug_board(),
+						rns_debug_role(),
+						_object->_link_id.toHex().c_str(),
+						packet.destination_hash().toHex().c_str(),
+						(unsigned)confirmed_mtu,
+						packet.receiving_interface().toString().c_str());
+#endif
 					if (_object->_status != Type::Link::HANDSHAKE) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+						Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=bad_state_after_signature link_id=%s status=%u\r\n",
+							(unsigned long)millis(),
+							rns_debug_board(),
+							rns_debug_role(),
+							_object->_link_id.toHex().c_str(),
+							(unsigned)_object->_status);
+#endif
 						throw std::runtime_error("Invalid link state for proof validation: " + _object->_status);
 					}
 					_object->_rtt = OS::time() - _object->_request_time;
@@ -422,11 +465,22 @@ void Link::validate_proof(const Packet& packet) {
 					if (confirmed_mtu) _object->_mtu = confirmed_mtu;
 					else _object->_mtu = RNS::Type::Reticulum::MTU;
 					update_mdu();
-					_object->_status = Type::Link::ACTIVE;
-					_object->_activated_at = OS::time();
-					_object->_last_proof = _object->_activated_at;
-					Transport::activate_link(*this);
-					VERBOSEF("Link %s established with %s, RTT is %.3f s", toString().c_str(), _object->_destination.toString().c_str(), OS::round(_object->_rtt, 3));
+						_object->_status = Type::Link::ACTIVE;
+						_object->_activated_at = OS::time();
+						_object->_last_proof = _object->_activated_at;
+						Transport::activate_link(*this);
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+						Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=link_active link_id=%s mtu=%u rtt_ms=%lu iface=%s link_obj=%s\r\n",
+							(unsigned long)millis(),
+							rns_debug_board(),
+							rns_debug_role(),
+							_object->_link_id.toHex().c_str(),
+							(unsigned)_object->_mtu,
+							(unsigned long)(_object->_rtt * 1000.0),
+							_object->_attached_interface.toString().c_str(),
+							toString().c_str());
+#endif
+						VERBOSEF("Link %s established with %s, RTT is %.3f s", toString().c_str(), _object->_destination.toString().c_str(), OS::round(_object->_rtt, 3));
 					
 					//p if _object->_rtt != None and _object->_establishment_cost != None and _object->_rtt > 0 and _object->_establishment_cost > 0:
 					if (_object->_rtt != 0.0 && _object->_establishment_cost != 0 && _object->_rtt > 0 and _object->_establishment_cost > 0) {
@@ -461,16 +515,55 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 					}
 				}
 				else {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+					Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=signature_invalid link_id=%s packet_dest=%s data_len=%u\r\n",
+						(unsigned long)millis(),
+						rns_debug_board(),
+						rns_debug_role(),
+						_object->_link_id.toHex().c_str(),
+						packet.destination_hash().toHex().c_str(),
+						(unsigned)packet_data.size());
+#endif
 					DEBUGF("Invalid link proof signature received by %s. Ignoring.", toString().c_str());
 				}
 			}
 			else {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+				Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=initiator_size_fail link_id=%s initiator=%u data_len=%u expected_len=%u\r\n",
+					(unsigned long)millis(),
+					rns_debug_board(),
+					rns_debug_role(),
+					_object->_link_id.toHex().c_str(),
+					_object->_initiator ? 1U : 0U,
+					(unsigned)packet_data.size(),
+					(unsigned)(Type::Identity::SIGLENGTH/8+ECPUBSIZE/2));
+#endif
 				DEBUGF("Failed initiator/size check for link proof signature received by %s. Ignoring.", toString().c_str());
 			}
 		}
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+		else {
+			Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=not_pending link_id=%s status=%u packet_dest=%s\r\n",
+				(unsigned long)millis(),
+				rns_debug_board(),
+				rns_debug_role(),
+				_object->_link_id.toHex().c_str(),
+				(unsigned)_object->_status,
+				packet.destination_hash().toHex().c_str());
+		}
+#endif
 	}
 	catch (const std::exception& e) {
 		_object->_status = Type::Link::CLOSED;
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+		Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=validate_exception link_id=%s detail=%s link_obj=%s\r\n",
+			(unsigned long)millis(),
+			rns_debug_board(),
+			rns_debug_role(),
+			_object->_link_id.toHex().c_str(),
+			e.what(),
+			toString().c_str());
+#endif
 		ERRORF("An error ocurred while validating link request proof on %s.", toString().c_str());
 		ERRORF("The contained exception was: %s", e.what());
 	}
