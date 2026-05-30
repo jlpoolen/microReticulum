@@ -29,10 +29,18 @@
 #include <unistd.h>
 #include <time.h>
 
+#if defined(ARDUINO)
+#include <Arduino.h>
+#endif
+
 using namespace RNS;
 using namespace RNS::Type::Transport;
 using namespace RNS::Utilities;
 using namespace RNS::Persistence;
+
+#ifndef MR_LINKFWD_DELAY_MS
+#define MR_LINKFWD_DELAY_MS 0
+#endif
 
 #ifndef RNS_PATH_TABLE_MAX
 #define RNS_PATH_TABLE_MAX 100
@@ -1841,6 +1849,12 @@ DestinationEntry empty_destination_entry;
 						          (unsigned)link_entry._remaining_hops,
 						          (unsigned)link_entry._hops,
 						          outbound_interface.toString().c_str());
+#if defined(ARDUINO) && MR_LINKFWD_DELAY_MS > 0
+						MRTPROBEF("MR TRANSPORT LINKFWD_DELAY: dest=%s delay_ms=%u",
+						          packet.destination_hash().toHex().c_str(),
+						          (unsigned)MR_LINKFWD_DELAY_MS);
+						delay(MR_LINKFWD_DELAY_MS);
+#endif
 						TRACE("Transport::inbound: Transmitting link transport packet");
 						// CBA RESERVE
 						//Bytes new_raw;
