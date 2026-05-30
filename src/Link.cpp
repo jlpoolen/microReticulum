@@ -280,6 +280,20 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 			link.prove();
 			link.request_time(OS::time());
 			Transport::register_link(link);
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+			Serial.printf("RNSLINKREQ ms=%lu board=%s role=%s event=accepted link_id=%s owner_dest=%s packet_hops=%u status=%u initiator=%u iface=%s callback_owner=%u link_obj=%s\r\n",
+				(unsigned long)millis(),
+				rns_debug_board(),
+				rns_debug_role(),
+				link.link_id().toHex().c_str(),
+				owner.hash().toHex().c_str(),
+				(unsigned)packet.hops(),
+				(unsigned)link.status(),
+				link.initiator() ? 1U : 0U,
+				packet.receiving_interface().toString().c_str(),
+				owner.callbacks()._link_established ? 1U : 0U,
+				link.toString().c_str());
+#endif
 			link.last_inbound(OS::time());
 			link.start_watchdog();
 			
@@ -668,8 +682,33 @@ void Link::rtt_packet(const Packet& packet) {
 	assert(_object);
 	try {
 		double measured_rtt = OS::time() - _object->_request_time;
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+		Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=enter link_id=%s status=%u initiator=%u data_len=%u measured_ms=%lu owner_cb=%u packet_iface=%s link_obj=%s\r\n",
+			(unsigned long)millis(),
+			rns_debug_board(),
+			rns_debug_role(),
+			_object->_link_id.toHex().c_str(),
+			(unsigned)_object->_status,
+			_object->_initiator ? 1U : 0U,
+			(unsigned)packet.data().size(),
+			(unsigned long)(measured_rtt * 1000.0),
+			_object->_owner.callbacks()._link_established ? 1U : 0U,
+			packet.receiving_interface().toString().c_str(),
+			toString().c_str());
+#endif
 		const Bytes plaintext(decrypt(packet.data()));
 		if (plaintext) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+			Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX status_before=%u link_obj=%s\r\n",
+				(unsigned long)millis(),
+				rns_debug_board(),
+				rns_debug_role(),
+				_object->_link_id.toHex().c_str(),
+				(unsigned)plaintext.size(),
+				(unsigned long)rns_debug_crc32(plaintext),
+				(unsigned)_object->_status,
+				toString().c_str());
+#endif
 			//p rtt = umsgpack.unpackb(plaintext)
 			MsgPack::Unpacker unpacker;
 			unpacker.feed(plaintext.data(), plaintext.size());
@@ -685,16 +724,75 @@ void Link::rtt_packet(const Packet& packet) {
 			}
 
 			try {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+				Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=active link_id=%s status=%u rtt_ms=%lu owner_cb=%u callback=%u link_obj=%s\r\n",
+					(unsigned long)millis(),
+					rns_debug_board(),
+					rns_debug_role(),
+					_object->_link_id.toHex().c_str(),
+					(unsigned)_object->_status,
+					(unsigned long)(_object->_rtt * 1000.0),
+					_object->_owner.callbacks()._link_established ? 1U : 0U,
+					_object->_callbacks._packet ? 1U : 0U,
+					toString().c_str());
+#endif
 				if (_object->_owner.callbacks()._link_established != nullptr) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+					Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=owner_callback_enter link_id=%s link_obj=%s\r\n",
+						(unsigned long)millis(),
+						rns_debug_board(),
+						rns_debug_role(),
+						_object->_link_id.toHex().c_str(),
+						toString().c_str());
+#endif
 					_object->_owner.callbacks()._link_established(*this);
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+					Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=owner_callback_return link_id=%s callback=%u link_obj=%s\r\n",
+						(unsigned long)millis(),
+						rns_debug_board(),
+						rns_debug_role(),
+						_object->_link_id.toHex().c_str(),
+						_object->_callbacks._packet ? 1U : 0U,
+						toString().c_str());
+#endif
 				}
 			}
 			catch (const std::exception& e) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+				Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=owner_callback_exception link_id=%s detail=%s link_obj=%s\r\n",
+					(unsigned long)millis(),
+					rns_debug_board(),
+					rns_debug_role(),
+					_object->_link_id.toHex().c_str(),
+					e.what(),
+					toString().c_str());
+#endif
 				ERRORF("Error occurred in external link establishment callback. The contained exception was: %s", e.what());
 			}
 		}
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+		else {
+			Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=decrypt_empty link_id=%s status=%u link_obj=%s\r\n",
+				(unsigned long)millis(),
+				rns_debug_board(),
+				rns_debug_role(),
+				_object->_link_id.toHex().c_str(),
+				(unsigned)_object->_status,
+				toString().c_str());
+		}
+#endif
 	}
 	catch (const std::exception& e) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+		Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=exception link_id=%s detail=%s status=%u link_obj=%s\r\n",
+			(unsigned long)millis(),
+			rns_debug_board(),
+			rns_debug_role(),
+			_object->_link_id.toHex().c_str(),
+			e.what(),
+			(unsigned)_object->_status,
+			toString().c_str());
+#endif
 		ERRORF("Error occurred while processing RTT packet, tearing down link. The contained exception was: %s", e.what());
 		teardown();
 	}
@@ -1161,6 +1259,22 @@ void Link::receive(const Packet& packet) {
 void Link::receive(const Packet& packet) {
 	assert(_object);
 	_object->_watchdog_lock = true;
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+	Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=enter link_id=%s packet_type=%u context=%u data_len=%u hops=%u status=%u initiator=%u callback=%u iface=%s link_obj=%s\r\n",
+		(unsigned long)millis(),
+		rns_debug_board(),
+		rns_debug_role(),
+		_object->_link_id.toHex().c_str(),
+		(unsigned)packet.packet_type(),
+		(unsigned)packet.context(),
+		(unsigned)packet.data().size(),
+		(unsigned)packet.hops(),
+		(unsigned)_object->_status,
+		_object->_initiator ? 1U : 0U,
+		_object->_callbacks._packet ? 1U : 0U,
+		packet.receiving_interface().toString().c_str(),
+		toString().c_str());
+#endif
 	if (_object->_status != Type::Link::CLOSED && !(_object->_initiator && packet.context() == Type::Packet::KEEPALIVE && packet.data() == "\xFF")) {
 		if (packet.receiving_interface() != _object->_attached_interface) {
 			ERROR("Link-associated packet received on unexpected interface! Someone might be trying to manipulate your communication!");
@@ -1355,9 +1469,32 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::LRRTT:
 				{
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+					Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=lrrtt_case link_id=%s status=%u initiator=%u data_len=%u callback=%u link_obj=%s\r\n",
+						(unsigned long)millis(),
+						rns_debug_board(),
+						rns_debug_role(),
+						_object->_link_id.toHex().c_str(),
+						(unsigned)_object->_status,
+						_object->_initiator ? 1U : 0U,
+						(unsigned)packet.data().size(),
+						_object->_callbacks._packet ? 1U : 0U,
+						toString().c_str());
+#endif
 					if (!_object->_initiator) {
 						rtt_packet(packet);
 					}
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+					else {
+						Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=lrrtt_ignored_initiator link_id=%s status=%u link_obj=%s\r\n",
+							(unsigned long)millis(),
+							rns_debug_board(),
+							rns_debug_role(),
+							_object->_link_id.toHex().c_str(),
+							(unsigned)_object->_status,
+							toString().c_str());
+					}
+#endif
 					break;
 				}
 				case Type::Packet::LINKCLOSE:
