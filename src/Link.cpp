@@ -44,6 +44,10 @@ using namespace RNS::Type::Link;
 using namespace RNS::Cryptography;
 using namespace RNS::Utilities;
 
+#ifndef MR_LRPROOF_DELAY_MS
+#define MR_LRPROOF_DELAY_MS 0
+#endif
+
 #ifndef RNS_DEBUG_INSTRUMENTATION
 #define RNS_DEBUG_INSTRUMENTATION 1
 #endif
@@ -368,6 +372,17 @@ void Link::prove() {
 	// CBA LINK
 	// CBA TODO: Determine which approach is better, passing liunk to packet or passing _link_destination
 	Packet proof(*this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
+#if defined(ARDUINO) && MR_LRPROOF_DELAY_MS > 0
+	Serial.printf("RNSPROOF_DELAY ms=%lu board=%s role=%s event=before_send link_id=%s delay_ms=%u status=%u initiator=%u\r\n",
+		(unsigned long)millis(),
+		rns_debug_board(),
+		rns_debug_role(),
+		_object->_link_id.toHex().c_str(),
+		(unsigned)MR_LRPROOF_DELAY_MS,
+		(unsigned)_object->_status,
+		_object->_initiator ? 1U : 0U);
+	delay(MR_LRPROOF_DELAY_MS);
+#endif
 	proof.send();
 	_object->_establishment_cost += proof.raw().size();
 	had_outbound();
