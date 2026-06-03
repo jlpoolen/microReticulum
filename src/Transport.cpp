@@ -4185,6 +4185,12 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 }
 
 /*static*/ void Transport::dump_stats() {
+#if defined(RNS_SUPPRESS_TRANSPORT_STATS) && RNS_SUPPRESS_TRANSPORT_STATS
+	return;
+#endif
+	if (RNS::loglevel() < RNS::LOG_VERBOSE) {
+		return;
+	}
 
 	Memory::dump_heap_stats();
 
