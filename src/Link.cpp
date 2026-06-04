@@ -1335,6 +1335,26 @@ void Link::receive(const Packet& packet) {
 								plaintext.toString().c_str(),
 								toString().c_str());
 #endif
+							if (!_object->_callbacks._packet && _object->_owner && _object->_owner.callbacks()._link_established) {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+								Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=late_owner_callback_enter link_id=%s link_obj=%s\r\n",
+									(unsigned long)millis(),
+									rns_debug_board(),
+									rns_debug_role(),
+									_object->_link_id.toHex().c_str(),
+									toString().c_str());
+#endif
+								_object->_owner.callbacks()._link_established(*this);
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
+								Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=late_owner_callback_return link_id=%s callback=%u link_obj=%s\r\n",
+									(unsigned long)millis(),
+									rns_debug_board(),
+									rns_debug_role(),
+									_object->_link_id.toHex().c_str(),
+									_object->_callbacks._packet ? 1U : 0U,
+									toString().c_str());
+#endif
+							}
 							if (_object->_callbacks._packet) {
 								//z thread = threading.Thread(target=_object->_callbacks.packet, args=(plaintext, packet))
 								//z thread.daemon = True
