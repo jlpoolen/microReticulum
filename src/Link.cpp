@@ -372,7 +372,7 @@ void Link::prove() {
 	// CBA LINK
 	// CBA TODO: Determine which approach is better, passing liunk to packet or passing _link_destination
 	Packet proof(*this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
-#if defined(ARDUINO) && MR_LRPROOF_DELAY_MS > 0
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO) && MR_LRPROOF_DELAY_MS > 0
 	Serial.printf("RNSPROOF_DELAY ms=%lu board=%s role=%s event=before_send link_id=%s delay_ms=%u status=%u initiator=%u\r\n",
 		(unsigned long)millis(),
 		rns_debug_board(),

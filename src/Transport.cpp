@@ -62,8 +62,12 @@ using namespace RNS::Persistence;
 #define RNS_HASHLIST_MAX 100
 #endif
 
+#ifndef RNS_DEBUG_INSTRUMENTATION
+#define RNS_DEBUG_INSTRUMENTATION 0
+#endif
+
 #ifndef MR_TRANSPORT_PROBE
-#define MR_TRANSPORT_PROBE 0
+#define MR_TRANSPORT_PROBE RNS_DEBUG_INSTRUMENTATION
 #endif
 
 #if MR_TRANSPORT_PROBE
@@ -76,6 +80,7 @@ using namespace RNS::Persistence;
 #define RNS_PR_TAGS_MAX	 32
 #endif
 
+#if MR_TRANSPORT_PROBE
 static const char* mr_packet_type_name(RNS::Type::Packet::types packet_type) {
 	switch (packet_type) {
 		case RNS::Type::Packet::DATA: return "DATA";
@@ -85,6 +90,7 @@ static const char* mr_packet_type_name(RNS::Type::Packet::types packet_type) {
 		default: return "UNKNOWN";
 	}
 }
+#endif
 
 /*static*/ Transport::InterfaceTable Transport::_interfaces;
 /*static*/ Transport::DestinationTable Transport::_destinations;
