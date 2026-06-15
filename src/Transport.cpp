@@ -66,6 +66,10 @@ using namespace RNS::Persistence;
 #define RNS_DEBUG_INSTRUMENTATION 0
 #endif
 
+#ifndef EX205_PACKET_TRACE
+#define EX205_PACKET_TRACE 0
+#endif
+
 #ifndef MR_TRANSPORT_PROBE
 #define MR_TRANSPORT_PROBE RNS_DEBUG_INSTRUMENTATION
 #endif
@@ -1855,6 +1859,16 @@ DestinationEntry empty_destination_entry;
 						          (unsigned)link_entry._remaining_hops,
 						          (unsigned)link_entry._hops,
 						          outbound_interface.toString().c_str());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+						Serial.printf("PH RT: ph=%s d=%s a=LF hp=%u rem=%u lh=%u in=%s out=%s\r\n",
+						              packet.getTruncatedHash().toHex().c_str(),
+						              packet.destination_hash().toHex().c_str(),
+						              (unsigned)packet.hops(),
+						              (unsigned)link_entry._remaining_hops,
+						              (unsigned)link_entry._hops,
+						              packet.receiving_interface().toString().c_str(),
+						              outbound_interface.toString().c_str());
+#endif
 #if defined(ARDUINO) && MR_LINKFWD_DELAY_MS > 0
 						MRTPROBEF("MR TRANSPORT LINKFWD_DELAY: dest=%s delay_ms=%u",
 						          packet.destination_hash().toHex().c_str(),
@@ -1882,6 +1896,15 @@ DestinationEntry empty_destination_entry;
 						          (unsigned)packet.hops(),
 						          (unsigned)link_entry._remaining_hops,
 						          (unsigned)link_entry._hops);
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+						Serial.printf("PH RT: ph=%s d=%s a=DROP hp=%u rem=%u lh=%u in=%s\r\n",
+						              packet.getTruncatedHash().toHex().c_str(),
+						              packet.destination_hash().toHex().c_str(),
+						              (unsigned)packet.hops(),
+						              (unsigned)link_entry._remaining_hops,
+						              (unsigned)link_entry._hops,
+						              packet.receiving_interface().toString().c_str());
+#endif
 						//p pass
 					}
 				}
