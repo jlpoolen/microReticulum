@@ -96,6 +96,24 @@ static const char* mr_packet_type_name(RNS::Type::Packet::types packet_type) {
 }
 #endif
 
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+static const char* ex205_lh_kind(const Packet& packet) {
+	if (packet.packet_type() == Type::Packet::LINKREQUEST) {
+		return "LINKREQUEST";
+	}
+	if (packet.packet_type() == Type::Packet::PROOF && packet.context() == Type::Packet::LRPROOF) {
+		return "LRPROOF";
+	}
+	if (packet.packet_type() == Type::Packet::DATA && packet.context() == Type::Packet::LRRTT) {
+		return "LRRTT";
+	}
+	if (packet.packet_type() == Type::Packet::DATA && packet.context() == Type::Packet::LINKCLOSE) {
+		return "LINKCLOSE";
+	}
+	return nullptr;
+}
+#endif
+
 /*static*/ Transport::InterfaceTable Transport::_interfaces;
 /*static*/ Transport::DestinationTable Transport::_destinations;
 /*static*/ std::set<Link> Transport::_pending_links;
@@ -876,6 +894,19 @@ DestinationEntry empty_destination_entry;
 	}
 
 	TRACEF("Transport::outbound: destination=%s hops=%d", packet.destination_hash().toHex().c_str(), packet.hops());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+	const char* lh_kind = ex205_lh_kind(packet);
+	if (lh_kind) {
+		Serial.printf("LH TX: ph=%s k=%s d=%s pt=%u c=%u hp=%u mode=outbound n=%u\r\n",
+			packet.getTruncatedHash().toHex().c_str(),
+			lh_kind,
+			packet.destination_hash().toHex().c_str(),
+			(unsigned)packet.packet_type(),
+			(unsigned)packet.context(),
+			(unsigned)packet.hops(),
+			(unsigned)packet.raw().size());
+	}
+#endif
 
 	while (_jobs_running) {
 		TRACE("Transport::outbound: sleeping...");
@@ -926,6 +957,20 @@ DestinationEntry empty_destination_entry;
 				new_raw << destination_entry._received_from;
 				//new_raw += packet.raw[2:]
 				new_raw << packet.raw().mid(2);
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+				const char* lh_kind = ex205_lh_kind(packet);
+				if (lh_kind) {
+					Serial.printf("LH RT: ph=%s k=%s d=%s a=OUT hp=%u rem=%u next=%s out=%s n=%u\r\n",
+						packet.getTruncatedHash().toHex().c_str(),
+						lh_kind,
+						packet.destination_hash().toHex().c_str(),
+						(unsigned)packet.hops(),
+						(unsigned)destination_entry._hops,
+						destination_entry._received_from.toHex().c_str(),
+						outbound_interface.toString().c_str(),
+						(unsigned)new_raw.size());
+				}
+#endif
 				transmit(outbound_interface, new_raw);
 				//_path_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
@@ -958,6 +1003,20 @@ DestinationEntry empty_destination_entry;
 				new_raw << destination_entry._received_from;
 				//new_raw += packet.raw[2:]
 				new_raw << packet.raw().mid(2);
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+				const char* lh_kind = ex205_lh_kind(packet);
+				if (lh_kind) {
+					Serial.printf("LH RT: ph=%s k=%s d=%s a=OUT_SHARED hp=%u rem=%u next=%s out=%s n=%u\r\n",
+						packet.getTruncatedHash().toHex().c_str(),
+						lh_kind,
+						packet.destination_hash().toHex().c_str(),
+						(unsigned)packet.hops(),
+						(unsigned)destination_entry._hops,
+						destination_entry._received_from.toHex().c_str(),
+						outbound_interface.toString().c_str(),
+						(unsigned)new_raw.size());
+				}
+#endif
 				transmit(outbound_interface, new_raw);
 				//Transport.destination_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
@@ -970,6 +1029,18 @@ DestinationEntry empty_destination_entry;
 		// simply transmit the packet directly on that one.
 		else {
 			TRACE("Transport::outbound: Sending packet over directly connected interface...");
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+			const char* lh_kind = ex205_lh_kind(packet);
+			if (lh_kind) {
+				Serial.printf("LH RT: ph=%s k=%s d=%s a=OUT_DIRECT hp=%u out=%s n=%u\r\n",
+					packet.getTruncatedHash().toHex().c_str(),
+					lh_kind,
+					packet.destination_hash().toHex().c_str(),
+					(unsigned)packet.hops(),
+					outbound_interface.toString().c_str(),
+					(unsigned)packet.raw().size());
+			}
+#endif
 			transmit(outbound_interface, packet.raw());
 			sent = true;
 		}
@@ -1485,6 +1556,20 @@ DestinationEntry empty_destination_entry;
 
 	packet.receiving_interface(interface);
 	packet.hops(packet.hops() + 1);
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+	const char* lh_kind = ex205_lh_kind(packet);
+	if (lh_kind) {
+		Serial.printf("LH RX: ph=%s k=%s d=%s pt=%u c=%u hp=%u in=%s n=%u\r\n",
+			packet.getTruncatedHash().toHex().c_str(),
+			lh_kind,
+			packet.destination_hash().toHex().c_str(),
+			(unsigned)packet.packet_type(),
+			(unsigned)packet.context(),
+			(unsigned)packet.hops(),
+			packet.receiving_interface().toString().c_str(),
+			(unsigned)packet.raw().size());
+	}
+#endif
 
 // TODO
 /*p
@@ -1786,6 +1871,21 @@ DestinationEntry empty_destination_entry;
 							_reverse_table.insert({packet.getTruncatedHash(), reverse_entry});
 						}
 						TRACE("Transport::outbound: Sending packet to next hop...");
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+						const char* lh_kind = ex205_lh_kind(packet);
+						if (lh_kind) {
+							Serial.printf("LH RT: ph=%s k=%s d=%s a=FWD hp=%u rem=%u next=%s in=%s out=%s n=%u\r\n",
+								packet.getTruncatedHash().toHex().c_str(),
+								lh_kind,
+								packet.destination_hash().toHex().c_str(),
+								(unsigned)packet.hops(),
+								(unsigned)remaining_hops,
+								next_hop.toHex().c_str(),
+								packet.receiving_interface().toString().c_str(),
+								outbound_interface.toString().c_str(),
+								(unsigned)new_raw.size());
+						}
+#endif
 						transmit(outbound_interface, new_raw);
 						destination_entry._timestamp = OS::time();
 					}
@@ -1796,6 +1896,17 @@ DestinationEntry empty_destination_entry;
 						MRTPROBEF("MR TRANSPORT DROP: reason=no_path type=%s dest=%s",
 						          mr_packet_type_name(packet.packet_type()),
 						          packet.destination_hash().toHex().c_str());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+						const char* lh_kind = ex205_lh_kind(packet);
+						if (lh_kind) {
+							Serial.printf("LH DROP: ph=%s k=%s d=%s reason=no_path hp=%u in=%s\r\n",
+								packet.getTruncatedHash().toHex().c_str(),
+								lh_kind,
+								packet.destination_hash().toHex().c_str(),
+								(unsigned)packet.hops(),
+								packet.receiving_interface().toString().c_str());
+						}
+#endif
 						TRACEF("Got packet in transport, but no known path to final destination %s. Dropping packet.", packet.destination_hash().toHex().c_str());
 					}
 				}
@@ -1805,6 +1916,19 @@ DestinationEntry empty_destination_entry;
 					          packet.destination_hash().toHex().c_str(),
 					          packet.transport_id().toHex().c_str(),
 					          _identity.hash().toHex().c_str());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+					const char* lh_kind = ex205_lh_kind(packet);
+					if (lh_kind) {
+						Serial.printf("LH DROP: ph=%s k=%s d=%s reason=not_next_hop hp=%u transport=%s local=%s in=%s\r\n",
+							packet.getTruncatedHash().toHex().c_str(),
+							lh_kind,
+							packet.destination_hash().toHex().c_str(),
+							(unsigned)packet.hops(),
+							packet.transport_id().toHex().c_str(),
+							_identity.hash().toHex().c_str(),
+							packet.receiving_interface().toString().c_str());
+					}
+#endif
 					TRACE("Transport::inbound: We are not designated next-hop so not transporting");
 				}
 			}
@@ -1868,6 +1992,18 @@ DestinationEntry empty_destination_entry;
 						              (unsigned)link_entry._hops,
 						              packet.receiving_interface().toString().c_str(),
 						              outbound_interface.toString().c_str());
+						const char* lh_kind = ex205_lh_kind(packet);
+						if (lh_kind) {
+							Serial.printf("LH RT: ph=%s k=%s d=%s a=LF hp=%u rem=%u lh=%u in=%s out=%s\r\n",
+							              packet.getTruncatedHash().toHex().c_str(),
+							              lh_kind,
+							              packet.destination_hash().toHex().c_str(),
+							              (unsigned)packet.hops(),
+							              (unsigned)link_entry._remaining_hops,
+							              (unsigned)link_entry._hops,
+							              packet.receiving_interface().toString().c_str(),
+							              outbound_interface.toString().c_str());
+						}
 #endif
 #if defined(ARDUINO) && MR_LINKFWD_DELAY_MS > 0
 						MRTPROBEF("MR TRANSPORT LINKFWD_DELAY: dest=%s delay_ms=%u",
@@ -1904,6 +2040,17 @@ DestinationEntry empty_destination_entry;
 						              (unsigned)link_entry._remaining_hops,
 						              (unsigned)link_entry._hops,
 						              packet.receiving_interface().toString().c_str());
+						const char* lh_kind = ex205_lh_kind(packet);
+						if (lh_kind) {
+							Serial.printf("LH DROP: ph=%s k=%s d=%s reason=link_hop_mismatch hp=%u rem=%u lh=%u in=%s\r\n",
+							              packet.getTruncatedHash().toHex().c_str(),
+							              lh_kind,
+							              packet.destination_hash().toHex().c_str(),
+							              (unsigned)packet.hops(),
+							              (unsigned)link_entry._remaining_hops,
+							              (unsigned)link_entry._hops,
+							              packet.receiving_interface().toString().c_str());
+						}
 #endif
 						//p pass
 					}
@@ -2425,13 +2572,50 @@ DestinationEntry empty_destination_entry;
 					auto& destination = (*iter).second;
 					if (destination.type() == packet.destination_type()) {
 						TRACE("Transport::inbound: Found local destination for LINKREQUEST");
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+						Serial.printf("LH LOCAL: ph=%s k=LINKREQUEST d=%s event=deliver_local hp=%u in=%s n=%u\r\n",
+							packet.getTruncatedHash().toHex().c_str(),
+							packet.destination_hash().toHex().c_str(),
+							(unsigned)packet.hops(),
+							packet.receiving_interface().toString().c_str(),
+							(unsigned)packet.raw().size());
+#endif
 						packet.destination(destination);
 						// CBA iterator over std::set is always const so need to make temporarily mutable
 						//destination.receive(packet);
 						destination.receive(packet);
 					}
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+					else {
+						Serial.printf("LH DROP: ph=%s k=LINKREQUEST d=%s reason=dest_type_mismatch hp=%u in=%s\r\n",
+							packet.getTruncatedHash().toHex().c_str(),
+							packet.destination_hash().toHex().c_str(),
+							(unsigned)packet.hops(),
+							packet.receiving_interface().toString().c_str());
+					}
+#endif
 				}
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+				else {
+					Serial.printf("LH DROP: ph=%s k=LINKREQUEST d=%s reason=no_local_destination hp=%u in=%s\r\n",
+						packet.getTruncatedHash().toHex().c_str(),
+						packet.destination_hash().toHex().c_str(),
+						(unsigned)packet.hops(),
+						packet.receiving_interface().toString().c_str());
+				}
+#endif
 			}
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+			else {
+				Serial.printf("LH DROP: ph=%s k=LINKREQUEST d=%s reason=transport_id_mismatch hp=%u transport=%s local=%s in=%s\r\n",
+					packet.getTruncatedHash().toHex().c_str(),
+					packet.destination_hash().toHex().c_str(),
+					(unsigned)packet.hops(),
+					packet.transport_id().toHex().c_str(),
+					_identity.hash().toHex().c_str(),
+					packet.receiving_interface().toString().c_str());
+			}
+#endif
 		}
 		
 		// Handling for data packets to local destinations
@@ -2513,6 +2697,18 @@ DestinationEntry empty_destination_entry;
 							(unsigned)link_entry._remaining_hops,
 							(unsigned)link_entry._hops,
 							link_entry._validated ? 1U : 0U);
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+						Serial.printf("LH RT: ph=%s k=LRPROOF d=%s a=CANDIDATE hp=%u rem=%u lh=%u in=%s expected=%s return=%s validated=%u\r\n",
+							packet.getTruncatedHash().toHex().c_str(),
+							packet.destination_hash().toHex().c_str(),
+							(unsigned)packet.hops(),
+							(unsigned)link_entry._remaining_hops,
+							(unsigned)link_entry._hops,
+							packet.receiving_interface().toString().c_str(),
+							link_entry._outbound_interface.toString().c_str(),
+							link_entry._receiving_interface.toString().c_str(),
+							link_entry._validated ? 1U : 0U);
+#endif
 						if (packet.receiving_interface() == link_entry._outbound_interface) {
 							try {
 								if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2) || packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2 + Type::Link::LINK_MTU_SIZE)) {
@@ -2545,6 +2741,17 @@ DestinationEntry empty_destination_entry;
 										//p new_raw += packet.raw[2:]
 										new_raw << packet.raw().mid(2);
 										link_entry._validated = true;
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+										Serial.printf("LH RT: ph=%s k=LRPROOF d=%s a=FWD hp=%u rem=%u lh=%u in=%s out=%s n=%u\r\n",
+											packet.getTruncatedHash().toHex().c_str(),
+											packet.destination_hash().toHex().c_str(),
+											(unsigned)packet.hops(),
+											(unsigned)link_entry._remaining_hops,
+											(unsigned)link_entry._hops,
+											packet.receiving_interface().toString().c_str(),
+											link_entry._receiving_interface.toString().c_str(),
+											(unsigned)new_raw.size());
+#endif
 										transmit(link_entry._receiving_interface, new_raw);
 										MRTPROBEF("RNSPROOF TRANSPORT_SENT: dest=%s return_iface=%s new_raw_len=%u",
 											packet.destination_hash().toHex().c_str(),
@@ -2555,6 +2762,13 @@ DestinationEntry empty_destination_entry;
 										MRTPROBEF("RNSPROOF TRANSPORT_INVALID_SIG: dest=%s peer_dest=%s",
 											packet.destination_hash().toHex().c_str(),
 											link_entry._destination_hash.toHex().c_str());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+										Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=invalid_sig hp=%u in=%s\r\n",
+											packet.getTruncatedHash().toHex().c_str(),
+											packet.destination_hash().toHex().c_str(),
+											(unsigned)packet.hops(),
+											packet.receiving_interface().toString().c_str());
+#endif
 										DEBUGF("Invalid link request proof in transport for link %s, dropping proof.", packet.destination_hash().toHex().c_str());
 									}
 								}
@@ -2562,12 +2776,28 @@ DestinationEntry empty_destination_entry;
 									MRTPROBEF("RNSPROOF TRANSPORT_BAD_SIZE: dest=%s data_len=%u",
 										packet.destination_hash().toHex().c_str(),
 										(unsigned)packet.data().size());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+									Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=bad_size hp=%u data_len=%u in=%s\r\n",
+										packet.getTruncatedHash().toHex().c_str(),
+										packet.destination_hash().toHex().c_str(),
+										(unsigned)packet.hops(),
+										(unsigned)packet.data().size(),
+										packet.receiving_interface().toString().c_str());
+#endif
 								}
 							}
 							catch (const std::exception& e) {
 								MRTPROBEF("RNSPROOF TRANSPORT_EXCEPTION: dest=%s detail=%s",
 									packet.destination_hash().toHex().c_str(),
 									e.what());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+								Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=exception detail=%s hp=%u in=%s\r\n",
+									packet.getTruncatedHash().toHex().c_str(),
+									packet.destination_hash().toHex().c_str(),
+									e.what(),
+									(unsigned)packet.hops(),
+									packet.receiving_interface().toString().c_str());
+#endif
 								ERRORF("Error while transporting link request proof. The contained exception was: %s", e.what());
 							}
 						}
@@ -2576,6 +2806,14 @@ DestinationEntry empty_destination_entry;
 								packet.destination_hash().toHex().c_str(),
 								packet.receiving_interface().toString().c_str(),
 								link_entry._outbound_interface.toString().c_str());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+							Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=wrong_iface hp=%u in=%s expected=%s\r\n",
+								packet.getTruncatedHash().toHex().c_str(),
+								packet.destination_hash().toHex().c_str(),
+								(unsigned)packet.hops(),
+								packet.receiving_interface().toString().c_str(),
+								link_entry._outbound_interface.toString().c_str());
+#endif
 							DEBUG("Link request proof received on wrong interface, not transporting it.");
 						}
 					}
@@ -2602,6 +2840,14 @@ DestinationEntry empty_destination_entry;
 									packet.destination_hash().toHex().c_str(),
 									link.link_id().toHex().c_str(),
 									packet.receiving_interface().toString().c_str());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+								Serial.printf("LH LOCAL: ph=%s k=LRPROOF d=%s event=pending_match link=%s hp=%u in=%s\r\n",
+									packet.getTruncatedHash().toHex().c_str(),
+									packet.destination_hash().toHex().c_str(),
+									link.link_id().toHex().c_str(),
+									(unsigned)packet.hops(),
+									packet.receiving_interface().toString().c_str());
+#endif
 								const_cast<Link&>(link).validate_proof(packet);
 							}
 						}
@@ -2609,6 +2855,14 @@ DestinationEntry empty_destination_entry;
 							MRTPROBEF("RNSPROOF LOCAL_NO_MATCH: dest=%s pending_links=%u",
 								packet.destination_hash().toHex().c_str(),
 								(unsigned)_pending_links.size());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+							Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=no_pending_link hp=%u pending=%u in=%s\r\n",
+								packet.getTruncatedHash().toHex().c_str(),
+								packet.destination_hash().toHex().c_str(),
+								(unsigned)packet.hops(),
+								(unsigned)_pending_links.size(),
+								packet.receiving_interface().toString().c_str());
+#endif
 						}
 					}
 				}

@@ -52,6 +52,10 @@ using namespace RNS::Utilities;
 #define RNS_DEBUG_INSTRUMENTATION 1
 #endif
 
+#ifndef EX205_PACKET_TRACE
+#define EX205_PACKET_TRACE 0
+#endif
+
 static uint32_t rns_debug_crc32(const Bytes& bytes) {
 	uint32_t crc = 0xFFFFFFFFUL;
 	for (size_t i = 0; i < bytes.size(); ++i) {
@@ -284,6 +288,15 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 			link.prove();
 			link.request_time(OS::time());
 			Transport::register_link(link);
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+			Serial.printf("LH LOCAL: ph=%s k=LINKREQUEST d=%s event=accepted link=%s hp=%u in=%s status=%u\r\n",
+				packet.getTruncatedHash().toHex().c_str(),
+				packet.destination_hash().toHex().c_str(),
+				link.link_id().toHex().c_str(),
+				(unsigned)packet.hops(),
+				packet.receiving_interface().toString().c_str(),
+				(unsigned)link.status());
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 			Serial.printf("RNSLINKREQ ms=%lu board=%s role=%s event=accepted link_id=%s owner_dest=%s packet_hops=%u status=%u initiator=%u iface=%s callback_owner=%u link_obj=%s\r\n",
 				(unsigned long)millis(),
@@ -383,6 +396,12 @@ void Link::prove() {
 		_object->_initiator ? 1U : 0U);
 	delay(MR_LRPROOF_DELAY_MS);
 #endif
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+	Serial.printf("LH LOCAL: k=LRPROOF event=send_proof link=%s data_len=%u status=%u\r\n",
+		_object->_link_id.toHex().c_str(),
+		(unsigned)proof.data().size(),
+		(unsigned)_object->_status);
+#endif
 	proof.send();
 	_object->_establishment_cost += proof.raw().size();
 	had_outbound();
@@ -407,6 +426,17 @@ void Link::prove_packet(const Packet& packet) {
 void Link::validate_proof(const Packet& packet) {
 	assert(_object);
 	DEBUGF("Link %s validating proof", link_id().toHex().c_str());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+	Serial.printf("LH LOCAL: ph=%s k=LRPROOF d=%s event=validate_enter link=%s status=%u initiator=%u hp=%u in=%s n=%u\r\n",
+		packet.getTruncatedHash().toHex().c_str(),
+		packet.destination_hash().toHex().c_str(),
+		_object->_link_id.toHex().c_str(),
+		(unsigned)_object->_status,
+		_object->_initiator ? 1U : 0U,
+		(unsigned)packet.hops(),
+		packet.receiving_interface().toString().c_str(),
+		(unsigned)packet.raw().size());
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 	Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=validate_enter link_id=%s status=%u initiator=%u packet_dest=%s data_len=%u raw_len=%u iface=%s link_obj=%s\r\n",
 		(unsigned long)millis(),
@@ -431,6 +461,14 @@ void Link::validate_proof(const Packet& packet) {
 			link_mode mode = mode_from_lp_packet(packet);
 			DEBUGF("Validating link request proof with mode %d", mode);
 			if (mode != _object->_mode) {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+				Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=mode_mismatch link=%s proof_mode=%u expected_mode=%u\r\n",
+					packet.getTruncatedHash().toHex().c_str(),
+					packet.destination_hash().toHex().c_str(),
+					_object->_link_id.toHex().c_str(),
+					(unsigned)mode,
+					(unsigned)_object->_mode);
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 				Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=mode_mismatch link_id=%s proof_mode=%u expected_mode=%u\r\n",
 					(unsigned long)millis(),
@@ -467,6 +505,14 @@ void Link::validate_proof(const Packet& packet) {
 				
 				TRACEF("Link %s validating identity", link_id().toHex().c_str());
 				if (_object->_destination.identity().validate(signature, signed_data)) {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+					Serial.printf("LH LOCAL: ph=%s k=LRPROOF d=%s event=signature_valid link=%s confirmed_mtu=%u in=%s\r\n",
+						packet.getTruncatedHash().toHex().c_str(),
+						packet.destination_hash().toHex().c_str(),
+						_object->_link_id.toHex().c_str(),
+						(unsigned)confirmed_mtu,
+						packet.receiving_interface().toString().c_str());
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 					Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=signature_valid link_id=%s packet_dest=%s confirmed_mtu=%u iface=%s\r\n",
 						(unsigned long)millis(),
@@ -478,6 +524,13 @@ void Link::validate_proof(const Packet& packet) {
 						packet.receiving_interface().toString().c_str());
 #endif
 					if (_object->_status != Type::Link::HANDSHAKE) {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+						Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=bad_state_after_signature link=%s status=%u\r\n",
+							packet.getTruncatedHash().toHex().c_str(),
+							packet.destination_hash().toHex().c_str(),
+							_object->_link_id.toHex().c_str(),
+							(unsigned)_object->_status);
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 						Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=bad_state_after_signature link_id=%s status=%u\r\n",
 							(unsigned long)millis(),
@@ -498,6 +551,15 @@ void Link::validate_proof(const Packet& packet) {
 						_object->_activated_at = OS::time();
 						_object->_last_proof = _object->_activated_at;
 						Transport::activate_link(*this);
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+						Serial.printf("LH LOCAL: ph=%s k=LRPROOF d=%s event=link_active link=%s mtu=%u rtt_ms=%lu in=%s\r\n",
+							packet.getTruncatedHash().toHex().c_str(),
+							packet.destination_hash().toHex().c_str(),
+							_object->_link_id.toHex().c_str(),
+							(unsigned)_object->_mtu,
+							(unsigned long)(_object->_rtt * 1000.0),
+							_object->_attached_interface.toString().c_str());
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 						Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=link_active link_id=%s mtu=%u rtt_ms=%lu iface=%s link_obj=%s\r\n",
 							(unsigned long)millis(),
@@ -523,6 +585,12 @@ void Link::validate_proof(const Packet& packet) {
 TRACEF("***** RTT data size: %d", rtt_data.size());
                     //p rtt_packet = RNS.Packet(self, rtt_data, context=RNS.Packet.LRRTT)
 					Packet rtt_packet(*this, rtt_data, Type::Packet::DATA, Type::Packet::LRRTT);
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+					Serial.printf("LH LOCAL: k=LRRTT event=send_rtt link=%s data_len=%u status=%u\r\n",
+						_object->_link_id.toHex().c_str(),
+						(unsigned)rtt_packet.data().size(),
+						(unsigned)_object->_status);
+#endif
 TRACEF("***** RTT packet data: %s", rtt_packet.data().toHex().c_str());
 rtt_packet.pack();
 Packet test_packet(RNS::Destination(RNS::Type::NONE), rtt_packet.raw());
@@ -544,6 +612,13 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 					}
 				}
 				else {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+					Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=signature_invalid link=%s data_len=%u\r\n",
+						packet.getTruncatedHash().toHex().c_str(),
+						packet.destination_hash().toHex().c_str(),
+						_object->_link_id.toHex().c_str(),
+						(unsigned)packet_data.size());
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 					Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=signature_invalid link_id=%s packet_dest=%s data_len=%u\r\n",
 						(unsigned long)millis(),
@@ -557,6 +632,15 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 				}
 			}
 			else {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+				Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=initiator_size_fail link=%s initiator=%u data_len=%u expected_len=%u\r\n",
+					packet.getTruncatedHash().toHex().c_str(),
+					packet.destination_hash().toHex().c_str(),
+					_object->_link_id.toHex().c_str(),
+					_object->_initiator ? 1U : 0U,
+					(unsigned)packet_data.size(),
+					(unsigned)(Type::Identity::SIGLENGTH/8+ECPUBSIZE/2));
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 				Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=initiator_size_fail link_id=%s initiator=%u data_len=%u expected_len=%u\r\n",
 					(unsigned long)millis(),
@@ -570,8 +654,8 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 				DEBUGF("Failed initiator/size check for link proof signature received by %s. Ignoring.", toString().c_str());
 			}
 		}
-#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 		else {
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 			Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=not_pending link_id=%s status=%u packet_dest=%s\r\n",
 				(unsigned long)millis(),
 				rns_debug_board(),
@@ -579,11 +663,25 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 				_object->_link_id.toHex().c_str(),
 				(unsigned)_object->_status,
 				packet.destination_hash().toHex().c_str());
-		}
 #endif
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+			Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=not_pending link=%s status=%u\r\n",
+				packet.getTruncatedHash().toHex().c_str(),
+				packet.destination_hash().toHex().c_str(),
+				_object->_link_id.toHex().c_str(),
+				(unsigned)_object->_status);
+#endif
+		}
 	}
 	catch (const std::exception& e) {
 		_object->_status = Type::Link::CLOSED;
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+		Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=validate_exception link=%s detail=%s\r\n",
+			packet.getTruncatedHash().toHex().c_str(),
+			packet.destination_hash().toHex().c_str(),
+			_object->_link_id.toHex().c_str(),
+			e.what());
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 		Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=validate_exception link_id=%s detail=%s link_obj=%s\r\n",
 			(unsigned long)millis(),
@@ -697,6 +795,17 @@ void Link::rtt_packet(const Packet& packet) {
 	assert(_object);
 	try {
 		double measured_rtt = OS::time() - _object->_request_time;
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+		Serial.printf("LH LOCAL: ph=%s k=LRRTT d=%s event=enter link=%s status=%u initiator=%u hp=%u in=%s n=%u\r\n",
+			packet.getTruncatedHash().toHex().c_str(),
+			packet.destination_hash().toHex().c_str(),
+			_object->_link_id.toHex().c_str(),
+			(unsigned)_object->_status,
+			_object->_initiator ? 1U : 0U,
+			(unsigned)packet.hops(),
+			packet.receiving_interface().toString().c_str(),
+			(unsigned)packet.raw().size());
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 		Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=enter link_id=%s status=%u initiator=%u data_len=%u measured_ms=%lu owner_cb=%u packet_iface=%s link_obj=%s\r\n",
 			(unsigned long)millis(),
@@ -713,6 +822,15 @@ void Link::rtt_packet(const Packet& packet) {
 #endif
 		const Bytes plaintext(decrypt(packet.data()));
 		if (plaintext) {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+			Serial.printf("LH LOCAL: ph=%s k=LRRTT d=%s event=decrypt_ok link=%s plaintext_len=%u plaintext_crc32=%08lX status_before=%u\r\n",
+				packet.getTruncatedHash().toHex().c_str(),
+				packet.destination_hash().toHex().c_str(),
+				_object->_link_id.toHex().c_str(),
+				(unsigned)plaintext.size(),
+				(unsigned long)rns_debug_crc32(plaintext),
+				(unsigned)_object->_status);
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 			Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX status_before=%u link_obj=%s\r\n",
 				(unsigned long)millis(),
@@ -739,6 +857,15 @@ void Link::rtt_packet(const Packet& packet) {
 			}
 
 			try {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+				Serial.printf("LH LOCAL: ph=%s k=LRRTT d=%s event=active link=%s status=%u rtt_ms=%lu callback=%u\r\n",
+					packet.getTruncatedHash().toHex().c_str(),
+					packet.destination_hash().toHex().c_str(),
+					_object->_link_id.toHex().c_str(),
+					(unsigned)_object->_status,
+					(unsigned long)(_object->_rtt * 1000.0),
+					_object->_callbacks._packet ? 1U : 0U);
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 				Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=active link_id=%s status=%u rtt_ms=%lu owner_cb=%u callback=%u link_obj=%s\r\n",
 					(unsigned long)millis(),
@@ -785,8 +912,15 @@ void Link::rtt_packet(const Packet& packet) {
 				ERRORF("Error occurred in external link establishment callback. The contained exception was: %s", e.what());
 			}
 		}
-#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 		else {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+			Serial.printf("LH DROP: ph=%s k=LRRTT d=%s reason=decrypt_empty link=%s status=%u\r\n",
+				packet.getTruncatedHash().toHex().c_str(),
+				packet.destination_hash().toHex().c_str(),
+				_object->_link_id.toHex().c_str(),
+				(unsigned)_object->_status);
+#endif
+#if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 			Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=decrypt_empty link_id=%s status=%u link_obj=%s\r\n",
 				(unsigned long)millis(),
 				rns_debug_board(),
@@ -794,10 +928,18 @@ void Link::rtt_packet(const Packet& packet) {
 				_object->_link_id.toHex().c_str(),
 				(unsigned)_object->_status,
 				toString().c_str());
-		}
 #endif
+		}
 	}
 	catch (const std::exception& e) {
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+		Serial.printf("LH DROP: ph=%s k=LRRTT d=%s reason=exception link=%s detail=%s status=%u\r\n",
+			packet.getTruncatedHash().toHex().c_str(),
+			packet.destination_hash().toHex().c_str(),
+			_object->_link_id.toHex().c_str(),
+			e.what(),
+			(unsigned)_object->_status);
+#endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 		Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=exception link_id=%s detail=%s status=%u link_obj=%s\r\n",
 			(unsigned long)millis(),
