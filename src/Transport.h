@@ -276,6 +276,8 @@ namespace RNS {
 		static void transmit(Interface& interface, const Bytes& raw);
 		static bool outbound(Packet& packet);
 		static bool packet_filter(const Packet& packet);
+		static void remember_packet_hash(const Bytes& packet_hash);
+		static void cull_packet_hashlist();
 		//static void inbound(const Bytes& raw, const Interface& interface = {Type::NONE});
 		static void inbound(const Bytes& raw, const Interface& interface);
 		static void inbound(const Bytes& raw);
@@ -384,6 +386,7 @@ namespace RNS {
 		static std::set<Link> _pending_links;		// Links that are being established
 		static std::set<Link> _active_links;		// Links that are active
 		static std::set<Bytes> _packet_hashlist;	// A list of packet hashes for duplicate detection
+		static std::map<Bytes, double> _packet_hash_times;	// First-seen time for hash expiry and oldest-first culling
 		static std::list<PacketReceipt> _receipts;	// Receipts of all outgoing packets for proof processing
 
 		static AnnounceTable _announce_table;	// A table for storing announces currently waiting to be retransmitted

@@ -62,6 +62,10 @@ using namespace RNS::Persistence;
 #define RNS_HASHLIST_MAX 100
 #endif
 
+#ifndef RNS_HASHLIST_RETENTION
+#define RNS_HASHLIST_RETENTION 600.0
+#endif
+
 #ifndef RNS_DEBUG_INSTRUMENTATION
 #define RNS_DEBUG_INSTRUMENTATION 0
 #endif
@@ -119,6 +123,7 @@ static const char* ex205_lh_kind(const Packet& packet) {
 /*static*/ std::set<Link> Transport::_pending_links;
 /*static*/ std::set<Link> Transport::_active_links;
 /*static*/ std::set<Bytes> Transport::_packet_hashlist;
+/*static*/ std::map<Bytes, double> Transport::_packet_hash_times;
 /*static*/ std::list<PacketReceipt> Transport::_receipts;
 
 /*static*/ Transport::AnnounceTable Transport::_announce_table;
@@ -555,12 +560,7 @@ DestinationEntry empty_destination_entry;
 				_announces_last_checked = OS::time();
 			}
 
-			// Cull the packet hashlist if it has reached its max size
-			if (_packet_hashlist.size() > _hashlist_maxsize) {
-				std::set<Bytes>::iterator iter = _packet_hashlist.begin();
-				std::advance(iter, _packet_hashlist.size() - _hashlist_maxsize);
-				_packet_hashlist.erase(_packet_hashlist.begin(), iter);
-			}
+			cull_packet_hashlist();
 
 			// Cull the path request tags list if it has reached its max size
 			if (_discovery_pr_tags.size() > _max_pr_tags) {
@@ -1247,7 +1247,7 @@ DestinationEntry empty_destination_entry;
 					TRACE("Transport::outbound: Packet transmission allowed");
 					if (!stored_hash) {
 						// CBA ACCUMULATES
-						_packet_hashlist.insert(packet.packet_hash());
+						remember_packet_hash(packet.packet_hash());
 						stored_hash = true;
 					}
 
@@ -1269,6 +1269,7 @@ DestinationEntry empty_destination_entry;
 	}
 
 	if (sent) {
+		remember_packet_hash(packet.packet_hash());
 		packet.sent(true);
 		packet.sent_at(OS::time());
 
@@ -1448,7 +1449,56 @@ DestinationEntry empty_destination_entry;
 	}
 
 	DEBUGF("Filtered packet with hash %s", packet.packet_hash().toHex().c_str());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+	Serial.printf("PH DROP: ph=%s d=%s pt=%u c=%u hp=%u reason=duplicate\r\n",
+		packet.getTruncatedHash().toHex().c_str(),
+		packet.destination_hash().toHex().c_str(),
+		(unsigned)packet.packet_type(),
+		(unsigned)packet.context(),
+		(unsigned)packet.hops());
+#endif
 	return false;
+}
+
+/*static*/ void Transport::remember_packet_hash(const Bytes& packet_hash) {
+	if (!packet_hash) return;
+
+	const auto [iter, inserted] = _packet_hashlist.insert(packet_hash);
+	if (inserted || _packet_hash_times.find(*iter) == _packet_hash_times.end()) {
+		_packet_hash_times[*iter] = OS::time();
+	}
+
+	cull_packet_hashlist();
+}
+
+/*static*/ void Transport::cull_packet_hashlist() {
+	const double now = OS::time();
+	for (auto iter = _packet_hash_times.begin(); iter != _packet_hash_times.end();) {
+		if (now > (iter->second + RNS_HASHLIST_RETENTION)) {
+			_packet_hashlist.erase(iter->first);
+			iter = _packet_hash_times.erase(iter);
+		}
+		else {
+			++iter;
+		}
+	}
+
+	while (_packet_hashlist.size() > _hashlist_maxsize) {
+		auto oldest = _packet_hash_times.end();
+		for (auto iter = _packet_hash_times.begin(); iter != _packet_hash_times.end(); ++iter) {
+			if (oldest == _packet_hash_times.end() || iter->second < oldest->second) {
+				oldest = iter;
+			}
+		}
+
+		if (oldest == _packet_hash_times.end()) {
+			_packet_hashlist.erase(_packet_hashlist.begin());
+		}
+		else {
+			_packet_hashlist.erase(oldest->first);
+			_packet_hash_times.erase(oldest);
+		}
+	}
 }
 
 /*static*/ void Transport::inbound(const Bytes& raw, const Interface& interface /*= {Type::NONE}*/) {
@@ -1548,6 +1598,20 @@ DestinationEntry empty_destination_entry;
 		WARNING("Transport::inbound: Packet unpack failed!");
 		return;
 	}
+	if (packet.hops() >= PATHFINDER_M) {
+		WARNINGF("Transport::inbound: Dropped packet %s at hop limit %u",
+			packet.getTruncatedHash().toHex().c_str(),
+			(unsigned)packet.hops());
+#if EX205_PACKET_TRACE && defined(ARDUINO)
+		Serial.printf("PH DROP: ph=%s reason=hop_limit hp=%u max=%u in=%s\r\n",
+			packet.getTruncatedHash().toHex().c_str(),
+			(unsigned)packet.hops(),
+			(unsigned)PATHFINDER_M,
+			interface.toString().c_str());
+#endif
+		_jobs_locked = false;
+		return;
+	}
 #ifndef NDEBUG
 	TRACEF("Transport::inbound: packet: %s", packet.debugString().c_str());
 #endif
@@ -1621,21 +1685,16 @@ DestinationEntry empty_destination_entry;
 		TRACE("Transport::inbound: Packet accepted by filter");
 
 		// Defer hashlist insertion for packets belonging to links in
-		// our link table, and for LRPROOF packets. On shared-medium
+		// our link table. On shared-medium
 		// interfaces (e.g. LoRa), a packet may arrive on the "wrong"
 		// interface first. Premature hash insertion would cause the
 		// correct arrival to be filtered as a duplicate.
-		// Reference: Python Transport.py lines 1362-1373
-		bool remember_packet_hash = true;
+		bool should_remember_packet_hash = true;
 		if (_link_table.find(packet.destination_hash()) != _link_table.end()) {
-			remember_packet_hash = false;
+			should_remember_packet_hash = false;
 		}
-		if (packet.packet_type() == Type::Packet::PROOF && packet.context() == Type::Packet::LRPROOF) {
-			remember_packet_hash = false;
-		}
-		if (remember_packet_hash) {
-			// CBA ACCUMULATES
-			_packet_hashlist.insert(packet.packet_hash());
+		if (should_remember_packet_hash) {
+			Transport::remember_packet_hash(packet.packet_hash());
 		}
 
 		// CBA Currently this packet cache is a noop since it's not forced
@@ -2024,7 +2083,7 @@ DestinationEntry empty_destination_entry;
 						transmit(outbound_interface, new_raw);
 						link_entry._timestamp = OS::time();
 						// Deferred hashlist insertion for link transport packets
-						_packet_hashlist.insert(packet.packet_hash());
+						Transport::remember_packet_hash(packet.packet_hash());
 					}
 					else {
 						MRTPROBEF("MR TRANSPORT DROP: reason=link_hop_mismatch dest=%s hops=%u link_remaining=%u link_hops=%u",
