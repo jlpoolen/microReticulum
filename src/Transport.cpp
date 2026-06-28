@@ -1684,13 +1684,18 @@ DestinationEntry empty_destination_entry;
 	if (accept) {
 		TRACE("Transport::inbound: Packet accepted by filter");
 
-		// Defer hashlist insertion for packets belonging to links in
-		// our link table. On shared-medium
+		// Defer hashlist insertion for established-Link traffic belonging
+		// to links in our link table. LRPROOF must be remembered before
+		// forwarding so a shared-medium echo cannot circulate indefinitely.
+		// On shared-medium
 		// interfaces (e.g. LoRa), a packet may arrive on the "wrong"
 		// interface first. Premature hash insertion would cause the
 		// correct arrival to be filtered as a duplicate.
 		bool should_remember_packet_hash = true;
-		if (_link_table.find(packet.destination_hash()) != _link_table.end()) {
+		const bool is_lrproof =
+			packet.packet_type() == Type::Packet::PROOF &&
+			packet.context() == Type::Packet::LRPROOF;
+		if (!is_lrproof && _link_table.find(packet.destination_hash()) != _link_table.end()) {
 			should_remember_packet_hash = false;
 		}
 		if (should_remember_packet_hash) {
