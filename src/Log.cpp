@@ -37,7 +37,7 @@ const char* RNS::getLevelName(LogLevel level) {
 	case LOG_WARNING:
 		return "WRN";
 	case LOG_NOTICE:
-		return "NOT";
+		return "INF";
 	case LOG_INFO:
 		return "INF";
 	case LOG_VERBOSE:
