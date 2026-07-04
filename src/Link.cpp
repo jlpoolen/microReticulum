@@ -298,7 +298,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 				(unsigned)link.status());
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-			Serial.printf("RNSLINKREQ ms=%lu board=%s role=%s event=accepted link_id=%s owner_dest=%s packet_hops=%u status=%u initiator=%u iface=%s callback_owner=%u link_obj=%s\r\n",
+			Serial.printf("RNSLINKREQ: ms=%lu board=%s role=%s event=accepted link_id=%s owner_dest=%s packet_hops=%u status=%u initiator=%u iface=%s callback_owner=%u link_obj=%s\r\n",
 				(unsigned long)millis(),
 				rns_debug_board(),
 				rns_debug_role(),
@@ -386,7 +386,7 @@ void Link::prove() {
 	// CBA TODO: Determine which approach is better, passing liunk to packet or passing _link_destination
 	Packet proof(*this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO) && MR_LRPROOF_DELAY_MS > 0
-	Serial.printf("RNSPROOF_DELAY ms=%lu board=%s role=%s event=before_send link_id=%s delay_ms=%u status=%u initiator=%u\r\n",
+	Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=before_send link_id=%s delay_ms=%u status=%u initiator=%u\r\n",
 		(unsigned long)millis(),
 		rns_debug_board(),
 		rns_debug_role(),
@@ -438,7 +438,7 @@ void Link::validate_proof(const Packet& packet) {
 		(unsigned)packet.raw().size());
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-	Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=validate_enter link_id=%s status=%u initiator=%u packet_dest=%s data_len=%u raw_len=%u iface=%s link_obj=%s\r\n",
+	Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=validate_enter link_id=%s status=%u initiator=%u packet_dest=%s data_len=%u raw_len=%u iface=%s link_obj=%s\r\n",
 		(unsigned long)millis(),
 		rns_debug_board(),
 		rns_debug_role(),
@@ -470,7 +470,7 @@ void Link::validate_proof(const Packet& packet) {
 					(unsigned)_object->_mode);
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-				Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=mode_mismatch link_id=%s proof_mode=%u expected_mode=%u\r\n",
+				Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=mode_mismatch link_id=%s proof_mode=%u expected_mode=%u\r\n",
 					(unsigned long)millis(),
 					rns_debug_board(),
 					rns_debug_role(),
@@ -514,7 +514,7 @@ void Link::validate_proof(const Packet& packet) {
 						packet.receiving_interface().toString().c_str());
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-					Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=signature_valid link_id=%s packet_dest=%s confirmed_mtu=%u iface=%s\r\n",
+					Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=signature_valid link_id=%s packet_dest=%s confirmed_mtu=%u iface=%s\r\n",
 						(unsigned long)millis(),
 						rns_debug_board(),
 						rns_debug_role(),
@@ -532,7 +532,7 @@ void Link::validate_proof(const Packet& packet) {
 							(unsigned)_object->_status);
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-						Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=bad_state_after_signature link_id=%s status=%u\r\n",
+						Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=bad_state_after_signature link_id=%s status=%u\r\n",
 							(unsigned long)millis(),
 							rns_debug_board(),
 							rns_debug_role(),
@@ -561,7 +561,7 @@ void Link::validate_proof(const Packet& packet) {
 							_object->_attached_interface.toString().c_str());
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-						Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=link_active link_id=%s mtu=%u rtt_ms=%lu iface=%s link_obj=%s\r\n",
+						Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=link_active link_id=%s mtu=%u rtt_ms=%lu iface=%s link_obj=%s\r\n",
 							(unsigned long)millis(),
 							rns_debug_board(),
 							rns_debug_role(),
@@ -620,7 +620,7 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 						(unsigned)packet_data.size());
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-					Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=signature_invalid link_id=%s packet_dest=%s data_len=%u\r\n",
+					Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=signature_invalid link_id=%s packet_dest=%s data_len=%u\r\n",
 						(unsigned long)millis(),
 						rns_debug_board(),
 						rns_debug_role(),
@@ -642,7 +642,7 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 					(unsigned)(Type::Identity::SIGLENGTH/8+ECPUBSIZE/2));
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-				Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=initiator_size_fail link_id=%s initiator=%u data_len=%u expected_len=%u\r\n",
+				Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=initiator_size_fail link_id=%s initiator=%u data_len=%u expected_len=%u\r\n",
 					(unsigned long)millis(),
 					rns_debug_board(),
 					rns_debug_role(),
@@ -656,7 +656,7 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 		}
 		else {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-			Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=not_pending link_id=%s status=%u packet_dest=%s\r\n",
+			Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=not_pending link_id=%s status=%u packet_dest=%s\r\n",
 				(unsigned long)millis(),
 				rns_debug_board(),
 				rns_debug_role(),
@@ -683,7 +683,7 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 			e.what());
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-		Serial.printf("RNSPROOF ms=%lu board=%s role=%s event=validate_exception link_id=%s detail=%s link_obj=%s\r\n",
+		Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=validate_exception link_id=%s detail=%s link_obj=%s\r\n",
 			(unsigned long)millis(),
 			rns_debug_board(),
 			rns_debug_role(),
@@ -807,7 +807,7 @@ void Link::rtt_packet(const Packet& packet) {
 			(unsigned)packet.raw().size());
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-		Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=enter link_id=%s status=%u initiator=%u data_len=%u measured_ms=%lu owner_cb=%u packet_iface=%s link_obj=%s\r\n",
+		Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=enter link_id=%s status=%u initiator=%u data_len=%u measured_ms=%lu owner_cb=%u packet_iface=%s link_obj=%s\r\n",
 			(unsigned long)millis(),
 			rns_debug_board(),
 			rns_debug_role(),
@@ -832,7 +832,7 @@ void Link::rtt_packet(const Packet& packet) {
 				(unsigned)_object->_status);
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-			Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX status_before=%u link_obj=%s\r\n",
+			Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX status_before=%u link_obj=%s\r\n",
 				(unsigned long)millis(),
 				rns_debug_board(),
 				rns_debug_role(),
@@ -867,7 +867,7 @@ void Link::rtt_packet(const Packet& packet) {
 					_object->_callbacks._packet ? 1U : 0U);
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-				Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=active link_id=%s status=%u rtt_ms=%lu owner_cb=%u callback=%u link_obj=%s\r\n",
+				Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=active link_id=%s status=%u rtt_ms=%lu owner_cb=%u callback=%u link_obj=%s\r\n",
 					(unsigned long)millis(),
 					rns_debug_board(),
 					rns_debug_role(),
@@ -880,7 +880,7 @@ void Link::rtt_packet(const Packet& packet) {
 #endif
 				if (_object->_owner.callbacks()._link_established != nullptr) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-					Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=owner_callback_enter link_id=%s link_obj=%s\r\n",
+					Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=owner_callback_enter link_id=%s link_obj=%s\r\n",
 						(unsigned long)millis(),
 						rns_debug_board(),
 						rns_debug_role(),
@@ -889,7 +889,7 @@ void Link::rtt_packet(const Packet& packet) {
 #endif
 					_object->_owner.callbacks()._link_established(*this);
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-					Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=owner_callback_return link_id=%s callback=%u link_obj=%s\r\n",
+					Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=owner_callback_return link_id=%s callback=%u link_obj=%s\r\n",
 						(unsigned long)millis(),
 						rns_debug_board(),
 						rns_debug_role(),
@@ -901,7 +901,7 @@ void Link::rtt_packet(const Packet& packet) {
 			}
 			catch (const std::exception& e) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-				Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=owner_callback_exception link_id=%s detail=%s link_obj=%s\r\n",
+				Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=owner_callback_exception link_id=%s detail=%s link_obj=%s\r\n",
 					(unsigned long)millis(),
 					rns_debug_board(),
 					rns_debug_role(),
@@ -921,7 +921,7 @@ void Link::rtt_packet(const Packet& packet) {
 				(unsigned)_object->_status);
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-			Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=decrypt_empty link_id=%s status=%u link_obj=%s\r\n",
+			Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=decrypt_empty link_id=%s status=%u link_obj=%s\r\n",
 				(unsigned long)millis(),
 				rns_debug_board(),
 				rns_debug_role(),
@@ -941,7 +941,7 @@ void Link::rtt_packet(const Packet& packet) {
 			(unsigned)_object->_status);
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-		Serial.printf("RNSLRRTT ms=%lu board=%s role=%s event=exception link_id=%s detail=%s status=%u link_obj=%s\r\n",
+		Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=exception link_id=%s detail=%s status=%u link_obj=%s\r\n",
 			(unsigned long)millis(),
 			rns_debug_board(),
 			rns_debug_role(),
@@ -1417,7 +1417,7 @@ void Link::receive(const Packet& packet) {
 	assert(_object);
 	_object->_watchdog_lock = true;
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-	Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=enter link_id=%s packet_type=%u context=%u data_len=%u hops=%u status=%u initiator=%u callback=%u iface=%s link_obj=%s\r\n",
+	Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=enter link_id=%s packet_type=%u context=%u data_len=%u hops=%u status=%u initiator=%u callback=%u iface=%s link_obj=%s\r\n",
 		(unsigned long)millis(),
 		rns_debug_board(),
 		rns_debug_role(),
@@ -1453,7 +1453,7 @@ void Link::receive(const Packet& packet) {
 					case Type::Packet::CONTEXT_NONE:
 					{
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-						Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=context_none_enter link_id=%s packet_len=%u callback=%u status=%u initiator=%u link_obj=%s\r\n",
+						Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=context_none_enter link_id=%s packet_len=%u callback=%u status=%u initiator=%u link_obj=%s\r\n",
 							(unsigned long)millis(),
 							rns_debug_board(),
 							rns_debug_role(),
@@ -1467,7 +1467,7 @@ void Link::receive(const Packet& packet) {
 						const Bytes plaintext = decrypt(packet.data());
 						if (plaintext) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-							Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX text=%s link_obj=%s\r\n",
+							Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX text=%s link_obj=%s\r\n",
 								(unsigned long)millis(),
 								rns_debug_board(),
 								rns_debug_role(),
@@ -1479,7 +1479,7 @@ void Link::receive(const Packet& packet) {
 #endif
 							if (!_object->_callbacks._packet && _object->_owner && _object->_owner.callbacks()._link_established) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-								Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=late_owner_callback_enter link_id=%s link_obj=%s\r\n",
+								Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=late_owner_callback_enter link_id=%s link_obj=%s\r\n",
 									(unsigned long)millis(),
 									rns_debug_board(),
 									rns_debug_role(),
@@ -1488,7 +1488,7 @@ void Link::receive(const Packet& packet) {
 #endif
 								_object->_owner.callbacks()._link_established(*this);
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-								Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=late_owner_callback_return link_id=%s callback=%u link_obj=%s\r\n",
+								Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=late_owner_callback_return link_id=%s callback=%u link_obj=%s\r\n",
 									(unsigned long)millis(),
 									rns_debug_board(),
 									rns_debug_role(),
@@ -1503,7 +1503,7 @@ void Link::receive(const Packet& packet) {
 								//z thread.start()
 								try {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-									Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=callback_enter link_id=%s plaintext_len=%u link_obj=%s\r\n",
+									Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=callback_enter link_id=%s plaintext_len=%u link_obj=%s\r\n",
 										(unsigned long)millis(),
 										rns_debug_board(),
 										rns_debug_role(),
@@ -1513,7 +1513,7 @@ void Link::receive(const Packet& packet) {
 #endif
 									_object->_callbacks._packet(plaintext, packet);
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-									Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=callback_return link_id=%s link_obj=%s\r\n",
+									Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=callback_return link_id=%s link_obj=%s\r\n",
 										(unsigned long)millis(),
 										rns_debug_board(),
 										rns_debug_role(),
@@ -1523,7 +1523,7 @@ void Link::receive(const Packet& packet) {
 								}
 								catch (const std::exception& e) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-									Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=callback_exception link_id=%s detail=%s link_obj=%s\r\n",
+									Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=callback_exception link_id=%s detail=%s link_obj=%s\r\n",
 										(unsigned long)millis(),
 										rns_debug_board(),
 										rns_debug_role(),
@@ -1536,7 +1536,7 @@ void Link::receive(const Packet& packet) {
 							}
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 							else {
-								Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=no_packet_callback link_id=%s plaintext_len=%u text=%s link_obj=%s\r\n",
+								Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=no_packet_callback link_id=%s plaintext_len=%u text=%s link_obj=%s\r\n",
 									(unsigned long)millis(),
 									rns_debug_board(),
 									rns_debug_role(),
@@ -1647,7 +1647,7 @@ void Link::receive(const Packet& packet) {
 				case Type::Packet::LRRTT:
 				{
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-					Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=lrrtt_case link_id=%s status=%u initiator=%u data_len=%u callback=%u link_obj=%s\r\n",
+					Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=lrrtt_case link_id=%s status=%u initiator=%u data_len=%u callback=%u link_obj=%s\r\n",
 						(unsigned long)millis(),
 						rns_debug_board(),
 						rns_debug_role(),
@@ -1663,7 +1663,7 @@ void Link::receive(const Packet& packet) {
 					}
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 					else {
-						Serial.printf("RNSLINKRX ms=%lu board=%s role=%s event=lrrtt_ignored_initiator link_id=%s status=%u link_obj=%s\r\n",
+						Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=lrrtt_ignored_initiator link_id=%s status=%u link_obj=%s\r\n",
 							(unsigned long)millis(),
 							rns_debug_board(),
 							rns_debug_role(),
@@ -1842,7 +1842,7 @@ const Bytes Link::encrypt(const Bytes& plaintext) {
 		}
 		Bytes token = _object->_token->encrypt(plaintext);
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-		Serial.printf("RNSDEC ms=%lu board=%s role=%s event=encrypt link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
+		Serial.printf("RNSDEC: ms=%lu board=%s role=%s event=encrypt link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
 			(unsigned long)millis(),
 			rns_debug_board(),
 			rns_debug_role(),
@@ -1869,7 +1869,7 @@ const Bytes Link::decrypt(const Bytes& ciphertext) {
 			_object->_token.reset(new Token(_object->_derived_key));
 		}
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-		Serial.printf("RNSDEC ms=%lu board=%s role=%s event=attempt link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
+		Serial.printf("RNSDEC: ms=%lu board=%s role=%s event=attempt link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
 			(unsigned long)millis(),
 			rns_debug_board(),
 			rns_debug_role(),
@@ -1884,7 +1884,7 @@ const Bytes Link::decrypt(const Bytes& ciphertext) {
 	}
 	catch (const std::exception& e) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-		Serial.printf("RNSDEC ms=%lu board=%s role=%s event=%s link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
+		Serial.printf("RNSDEC: ms=%lu board=%s role=%s event=%s link_id=%s token_len=%u token_crc32=%08lX sign_key_crc32=%08lX enc_key_crc32=%08lX link_obj=%s\r\n",
 			(unsigned long)millis(),
 			rns_debug_board(),
 			rns_debug_role(),
