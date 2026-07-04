@@ -26,6 +26,7 @@
 #include "Utilities/Persistence.h"
 
 #include <algorithm>
+#include <string.h>
 #include <unistd.h>
 #include <time.h>
 
@@ -80,8 +81,14 @@ using namespace RNS::Persistence;
 
 #if MR_TRANSPORT_PROBE
 #define MRTPROBEF(...) NOTICEF(__VA_ARGS__)
+#if defined(ARDUINO)
+#define RNSPROBEF(...) do { Serial.printf(__VA_ARGS__); Serial.print("\r\n"); } while (0)
+#else
+#define RNSPROBEF(...) NOTICEF(__VA_ARGS__)
+#endif
 #else
 #define MRTPROBEF(...) do {} while (0)
+#define RNSPROBEF(...) do {} while (0)
 #endif
 
 #ifndef RNS_PR_TAGS_MAX
@@ -89,6 +96,27 @@ using namespace RNS::Persistence;
 #endif
 
 #if MR_TRANSPORT_PROBE
+static std::string mr_percent_encode(const char* text) {
+	static constexpr char hex[] = "0123456789ABCDEF";
+	std::string encoded;
+	if (!text) return encoded;
+	encoded.reserve(strlen(text) * 3U);
+	for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor; ++cursor) {
+		const uint8_t value = *cursor;
+		const bool unreserved =
+			(value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') ||
+			(value >= '0' && value <= '9') || value == '-' || value == '.' ||
+			value == '_' || value == '~';
+		if (unreserved) encoded.push_back((char)value);
+		else {
+			encoded.push_back('%');
+			encoded.push_back(hex[(value >> 4U) & 0x0FU]);
+			encoded.push_back(hex[value & 0x0FU]);
+		}
+	}
+	return encoded;
+}
+
 static const char* mr_packet_type_name(RNS::Type::Packet::types packet_type) {
 	switch (packet_type) {
 		case RNS::Type::Packet::DATA: return "DATA";
@@ -2738,7 +2766,7 @@ DestinationEntry empty_destination_entry;
 			// Handling for proofs and link-request proofs
 			else if (packet.packet_type() == Type::Packet::PROOF) {
 				TRACE("Transport::inbound: Packet is PROOF");
-				MRTPROBEF("RNSPROOF IN: dest=%s ctx=%u data_len=%u hops=%u iface=%s link_table=%u pending_links=%u",
+				RNSPROBEF("RNSPROOF IN: dest=%s ctx=%u data_len=%u hops=%u iface=%s link_table=%u pending_links=%u",
 					packet.destination_hash().toHex().c_str(),
 					(unsigned)packet.context(),
 					(unsigned)packet.data().size(),
@@ -2753,7 +2781,7 @@ DestinationEntry empty_destination_entry;
 					if ((Reticulum::transport_enabled() || for_local_client_link || from_local_client) && _link_table.find(packet.destination_hash()) != _link_table.end()) {
 						TRACE("Handling link request proof...");
 						LinkEntry& link_entry = (*_link_table.find(packet.destination_hash())).second;
-						MRTPROBEF("RNSPROOF TRANSPORT_CANDIDATE: dest=%s recv_iface=%s expected_out_iface=%s return_iface=%s remaining=%u hops=%u validated=%u",
+						RNSPROBEF("RNSPROOF TRANSPORT_CANDIDATE: dest=%s recv_iface=%s expected_out_iface=%s return_iface=%s remaining=%u hops=%u validated=%u",
 							packet.destination_hash().toHex().c_str(),
 							packet.receiving_interface().toString().c_str(),
 							link_entry._outbound_interface.toString().c_str(),
@@ -2789,7 +2817,7 @@ DestinationEntry empty_destination_entry;
 
 									if (peer_identity.validate(signature, signed_data)) {
 										TRACEF("Link request proof validated for transport via %s", link_entry._receiving_interface.toString().c_str());
-										MRTPROBEF("RNSPROOF TRANSPORT_VALID: dest=%s peer_dest=%s recv_iface=%s return_iface=%s raw_len=%u",
+										RNSPROBEF("RNSPROOF TRANSPORT_VALID: dest=%s peer_dest=%s recv_iface=%s return_iface=%s raw_len=%u",
 											packet.destination_hash().toHex().c_str(),
 											link_entry._destination_hash.toHex().c_str(),
 											packet.receiving_interface().toString().c_str(),
@@ -2817,13 +2845,13 @@ DestinationEntry empty_destination_entry;
 											(unsigned)new_raw.size());
 #endif
 										transmit(link_entry._receiving_interface, new_raw);
-										MRTPROBEF("RNSPROOF TRANSPORT_SENT: dest=%s return_iface=%s new_raw_len=%u",
+										RNSPROBEF("RNSPROOF TRANSPORT_SENT: dest=%s return_iface=%s new_raw_len=%u",
 											packet.destination_hash().toHex().c_str(),
 											link_entry._receiving_interface.toString().c_str(),
 											(unsigned)new_raw.size());
 									}
 									else {
-										MRTPROBEF("RNSPROOF TRANSPORT_INVALID_SIG: dest=%s peer_dest=%s",
+										RNSPROBEF("RNSPROOF TRANSPORT_INVALID_SIG: dest=%s peer_dest=%s",
 											packet.destination_hash().toHex().c_str(),
 											link_entry._destination_hash.toHex().c_str());
 #if EX205_PACKET_TRACE && defined(ARDUINO)
@@ -2837,7 +2865,7 @@ DestinationEntry empty_destination_entry;
 									}
 								}
 								else {
-									MRTPROBEF("RNSPROOF TRANSPORT_BAD_SIZE: dest=%s data_len=%u",
+									RNSPROBEF("RNSPROOF TRANSPORT_BAD_SIZE: dest=%s data_len=%u",
 										packet.destination_hash().toHex().c_str(),
 										(unsigned)packet.data().size());
 #if EX205_PACKET_TRACE && defined(ARDUINO)
@@ -2851,9 +2879,9 @@ DestinationEntry empty_destination_entry;
 								}
 							}
 							catch (const std::exception& e) {
-								MRTPROBEF("RNSPROOF TRANSPORT_EXCEPTION: dest=%s detail=%s",
+								RNSPROBEF("RNSPROOF TRANSPORT_EXCEPTION: dest=%s detail_encoding=percent detail=%s",
 									packet.destination_hash().toHex().c_str(),
-									e.what());
+									mr_percent_encode(e.what()).c_str());
 #if EX205_PACKET_TRACE && defined(ARDUINO)
 								Serial.printf("LH DROP: ph=%s k=LRPROOF d=%s reason=exception detail=%s hp=%u in=%s\r\n",
 									packet.getTruncatedHash().toHex().c_str(),
@@ -2866,7 +2894,7 @@ DestinationEntry empty_destination_entry;
 							}
 						}
 						else {
-							MRTPROBEF("RNSPROOF TRANSPORT_WRONG_IFACE: dest=%s recv_iface=%s expected_out_iface=%s",
+							RNSPROBEF("RNSPROOF TRANSPORT_WRONG_IFACE: dest=%s recv_iface=%s expected_out_iface=%s",
 								packet.destination_hash().toHex().c_str(),
 								packet.receiving_interface().toString().c_str(),
 								link_entry._outbound_interface.toString().c_str());
@@ -2885,7 +2913,7 @@ DestinationEntry empty_destination_entry;
 						// Check if we can deliver it to a local
 						// pending link
 						TRACEF("Handling proof for link request %s", packet.destination_hash().toHex().c_str());
-						MRTPROBEF("RNSPROOF LOCAL_SCAN: dest=%s pending_links=%u transport_enabled=%u for_local_client_link=%u from_local_client=%u",
+						RNSPROBEF("RNSPROOF LOCAL_SCAN: dest=%s pending_links=%u transport_enabled=%u for_local_client_link=%u from_local_client=%u",
 							packet.destination_hash().toHex().c_str(),
 							(unsigned)_pending_links.size(),
 							Reticulum::transport_enabled() ? 1U : 0U,
@@ -2900,7 +2928,7 @@ DestinationEntry empty_destination_entry;
 							if (link.link_id() == packet.destination_hash()) {
 								TRACE("Requesting pending link to validate proof");
 								matched_pending_link = true;
-								MRTPROBEF("RNSPROOF LOCAL_MATCH: dest=%s pending_link=%s iface=%s",
+								RNSPROBEF("RNSPROOF LOCAL_MATCH: dest=%s pending_link=%s iface=%s",
 									packet.destination_hash().toHex().c_str(),
 									link.link_id().toHex().c_str(),
 									packet.receiving_interface().toString().c_str());
@@ -2916,7 +2944,7 @@ DestinationEntry empty_destination_entry;
 							}
 						}
 						if (!matched_pending_link) {
-							MRTPROBEF("RNSPROOF LOCAL_NO_MATCH: dest=%s pending_links=%u",
+							RNSPROBEF("RNSPROOF LOCAL_NO_MATCH: dest=%s pending_links=%u",
 								packet.destination_hash().toHex().c_str(),
 								(unsigned)_pending_links.size());
 #if EX205_PACKET_TRACE && defined(ARDUINO)

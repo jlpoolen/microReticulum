@@ -67,6 +67,49 @@ static uint32_t rns_debug_crc32(const Bytes& bytes) {
 	return ~crc;
 }
 
+static std::string rns_debug_percent_encode(const char* text) {
+	static constexpr char hex[] = "0123456789ABCDEF";
+	std::string encoded;
+	if (!text) return encoded;
+	encoded.reserve(strlen(text) * 3U);
+	for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor; ++cursor) {
+		const uint8_t value = *cursor;
+		const bool unreserved =
+			(value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') ||
+			(value >= '0' && value <= '9') || value == '-' || value == '.' ||
+			value == '_' || value == '~';
+		if (unreserved) {
+			encoded.push_back((char)value);
+		} else {
+			encoded.push_back('%');
+			encoded.push_back(hex[(value >> 4U) & 0x0FU]);
+			encoded.push_back(hex[value & 0x0FU]);
+		}
+	}
+	return encoded;
+}
+
+static std::string rns_debug_percent_encode(const Bytes& bytes) {
+	static constexpr char hex[] = "0123456789ABCDEF";
+	std::string encoded;
+	encoded.reserve(bytes.size() * 3U);
+	for (size_t i = 0; i < bytes.size(); ++i) {
+		const uint8_t value = bytes[i];
+		const bool unreserved =
+			(value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') ||
+			(value >= '0' && value <= '9') || value == '-' || value == '.' ||
+			value == '_' || value == '~';
+		if (unreserved) {
+			encoded.push_back((char)value);
+		} else {
+			encoded.push_back('%');
+			encoded.push_back(hex[(value >> 4U) & 0x0FU]);
+			encoded.push_back(hex[value & 0x0FU]);
+		}
+	}
+	return encoded;
+}
+
 static const char* rns_debug_decrypt_class(const char* detail) {
 	if (!detail) return "EXCEPTION_OTHER";
 	if (strstr(detail, "HMAC")) return "HMAC_INVALID";
@@ -683,12 +726,12 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 			e.what());
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-		Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=validate_exception link_id=%s detail=%s link_obj=%s\r\n",
+		Serial.printf("RNSPROOF_DELAY: ms=%lu board=%s role=%s event=validate_exception link_id=%s detail_encoding=percent detail=%s link_obj=%s\r\n",
 			(unsigned long)millis(),
 			rns_debug_board(),
 			rns_debug_role(),
 			_object->_link_id.toHex().c_str(),
-			e.what(),
+			rns_debug_percent_encode(e.what()).c_str(),
 			toString().c_str());
 #endif
 		ERRORF("An error ocurred while validating link request proof on %s.", toString().c_str());
@@ -901,12 +944,12 @@ void Link::rtt_packet(const Packet& packet) {
 			}
 			catch (const std::exception& e) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-				Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=owner_callback_exception link_id=%s detail=%s link_obj=%s\r\n",
+				Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=owner_callback_exception link_id=%s detail_encoding=percent detail=%s link_obj=%s\r\n",
 					(unsigned long)millis(),
 					rns_debug_board(),
 					rns_debug_role(),
 					_object->_link_id.toHex().c_str(),
-					e.what(),
+					rns_debug_percent_encode(e.what()).c_str(),
 					toString().c_str());
 #endif
 				ERRORF("Error occurred in external link establishment callback. The contained exception was: %s", e.what());
@@ -941,12 +984,12 @@ void Link::rtt_packet(const Packet& packet) {
 			(unsigned)_object->_status);
 #endif
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-		Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=exception link_id=%s detail=%s status=%u link_obj=%s\r\n",
+		Serial.printf("RNSLRRTT: ms=%lu board=%s role=%s event=exception link_id=%s detail_encoding=percent detail=%s status=%u link_obj=%s\r\n",
 			(unsigned long)millis(),
 			rns_debug_board(),
 			rns_debug_role(),
 			_object->_link_id.toHex().c_str(),
-			e.what(),
+			rns_debug_percent_encode(e.what()).c_str(),
 			(unsigned)_object->_status,
 			toString().c_str());
 #endif
@@ -1467,14 +1510,14 @@ void Link::receive(const Packet& packet) {
 						const Bytes plaintext = decrypt(packet.data());
 						if (plaintext) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-							Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX text=%s link_obj=%s\r\n",
+							Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=decrypt_ok link_id=%s plaintext_len=%u plaintext_crc32=%08lX text_encoding=percent text=%s link_obj=%s\r\n",
 								(unsigned long)millis(),
 								rns_debug_board(),
 								rns_debug_role(),
 								_object->_link_id.toHex().c_str(),
 								(unsigned)plaintext.size(),
 								(unsigned long)rns_debug_crc32(plaintext),
-								plaintext.toString().c_str(),
+								rns_debug_percent_encode(plaintext).c_str(),
 								toString().c_str());
 #endif
 							if (!_object->_callbacks._packet && _object->_owner && _object->_owner.callbacks()._link_established) {
@@ -1523,12 +1566,12 @@ void Link::receive(const Packet& packet) {
 								}
 								catch (const std::exception& e) {
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
-									Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=callback_exception link_id=%s detail=%s link_obj=%s\r\n",
+									Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=callback_exception link_id=%s detail_encoding=percent detail=%s link_obj=%s\r\n",
 										(unsigned long)millis(),
 										rns_debug_board(),
 										rns_debug_role(),
 										_object->_link_id.toHex().c_str(),
-										e.what(),
+										rns_debug_percent_encode(e.what()).c_str(),
 										toString().c_str());
 #endif
 									ERRORF("Error while executing packet callback from %s. The contained exception was: %s", toString().c_str(), e.what());
@@ -1536,13 +1579,13 @@ void Link::receive(const Packet& packet) {
 							}
 #if RNS_DEBUG_INSTRUMENTATION && defined(ARDUINO)
 							else {
-								Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=no_packet_callback link_id=%s plaintext_len=%u text=%s link_obj=%s\r\n",
+								Serial.printf("RNSLINKRX: ms=%lu board=%s role=%s event=no_packet_callback link_id=%s plaintext_len=%u text_encoding=percent text=%s link_obj=%s\r\n",
 									(unsigned long)millis(),
 									rns_debug_board(),
 									rns_debug_role(),
 									_object->_link_id.toHex().c_str(),
 									(unsigned)plaintext.size(),
-									plaintext.toString().c_str(),
+									rns_debug_percent_encode(plaintext).c_str(),
 									toString().c_str());
 							}
 #endif
